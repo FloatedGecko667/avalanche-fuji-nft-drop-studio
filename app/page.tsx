@@ -7,11 +7,22 @@ import {
   getActiveClaimCondition,
   nextTokenIdToMint,
 } from "thirdweb/extensions/erc721";
-import { toEther } from "thirdweb";
+import { toEther, type ThirdwebClient } from "thirdweb";
 import { Providers } from "./providers";
 import { client, chain, nftDropContract } from "@/lib/client";
 
 function MintCard() {
+  if (!client) {
+    return (
+      <div className="card">
+        <p className="muted">
+          NEXT_PUBLIC_TEMPLATE_CLIENT_ID が未設定です。.env.local に
+          thirdweb Dashboard で発行した Client ID を設定してください。
+        </p>
+      </div>
+    );
+  }
+
   if (!nftDropContract) {
     return (
       <div className="card">
@@ -23,12 +34,14 @@ function MintCard() {
     );
   }
 
-  return <MintCardWithContract contract={nftDropContract} />;
+  return <MintCardWithContract client={client} contract={nftDropContract} />;
 }
 
 function MintCardWithContract({
+  client,
   contract,
 }: {
+  client: ThirdwebClient;
   contract: NonNullable<typeof nftDropContract>;
 }) {
   const account = useActiveAccount();

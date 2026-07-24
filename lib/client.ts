@@ -11,18 +11,22 @@ if (!clientId) {
   );
 }
 
-export const client = createThirdwebClient({
-  clientId: clientId ?? "",
-});
+// createThirdwebClient throws synchronously on an empty clientId, which would
+// crash prerendering before env vars are configured. Keep it nullable so the
+// app can render a setup message instead.
+export const client = clientId
+  ? createThirdwebClient({ clientId })
+  : null;
 
 export const chain = avalancheFuji;
 
 const contractAddress = process.env.NEXT_PUBLIC_NFT_DROP_CONTRACT_ADDRESS;
 
-export const nftDropContract = contractAddress
-  ? getContract({
-      client,
-      chain,
-      address: contractAddress,
-    })
-  : null;
+export const nftDropContract =
+  client && contractAddress
+    ? getContract({
+        client,
+        chain,
+        address: contractAddress,
+      })
+    : null;
