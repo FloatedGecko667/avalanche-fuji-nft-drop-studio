@@ -1,0 +1,116 @@
+# CLAUDE.md — Avalanche Fuji NFT Drop Studio（旧称: Sepolia NFT Drop Studio）
+
+このファイルは、Claude Code（または他のセッション）がこのディレクトリで作業を再開する際に、これまでの経緯・決定事項・未検証事項をゼロから再現できるようにするための引き継ぎメモです。README.mdは提出物としての体裁、このファイルは「なぜそうしたか」「何が終わっていて何が残っているか」を残す作業ログという役割分担にしています。
+
+> **フォルダ名について**: ローカルのディレクトリ名は`sepolia-nft-drop-studio`のままです（開発初期にSepoliaを使う想定で作成し、その後Coworkの作業環境の制約でフォルダ名を変更できなかった）。中身は現在Avalanche Fuji向けに切り替え済みで、`package.json`の`name`は`avalanche-fuji-nft-drop-studio`。ディレクトリ名とpackage名が一致していない状態なので、混同しないこと。
+
+---
+
+## 1. プロジェクトの目的
+
+大学(?)の課題として、Web3フレームワーク thirdweb を使ったNFT発行（Minting）サイトを作る。参照資料は thirdweb blog の `tag/nft-drop`。テストネット推奨、メインネット不使用。
+
+**確定した用途**: 自分で用意したユニークなデジタルコンテンツを、数量限定・条件付き（Claim Conditionsのallowlist/供給数上限/配布期間）で配布する。ERC1155 Open Editionのような「同一コンテンツの無制限配布」ではなく、DropERC721で1トークンごとに固有メタデータを持たせる前提。README.md「1. 作ったものの説明」および`app/page.tsx`のサイト上コピーに反映済み。
+
+提出要件（変更しないこと）:
+- 作ったものの名称
+- 作ったものの説明
+- システム構成図
+- 使用クラウドサービス・ソフトウェア一覧表
+- ソースコード確認先URL（GitHub）
+- 実際に動いていることがわかる画面ショット（本人が自分で操作して撮る。ポンチ絵は再提出対象）
+
+---
+
+## 2. 確定した技術方針とその理由（変更する場合は根拠を確認してから）
+
+| 項目 | 決定 | 理由 |
+|---|---|---|
+| インフラ | Vercel（無料枠） | フロントはサーバーサイドで秘密鍵・機密情報を扱わない（非カストディアル）。バックエンドAPI/DBが不要なため、CLAUDE.mdグローバル方針の「プライベートクラウド前提の場合はDocker Compose/K8s必須」という条件が非適用と判断。バックエンドを追加する要件が生じたら、Oracle Cloud Free Tire + Docker Composeに切り替える。 |
+| テストネット | **Avalanche Fuji**（Chain ID 43113）。旧: Ethereum Sepolia | 当初はSepoliaを採用したが、Ethereum FoundationがSepoliaのEOLを2026年9月30日頃と発表していることが判明。Base/Arbitrum/Optimism SepoliaはSepoliaをL1決済層とするため同じ影響を受け、Hoodiはdapp開発非推奨（公式にSepolia利用を推奨）、Polygon AmoyはSepoliaをroot chainとするチェックポイント依存構造かつ執筆時点で公式無料RPCが2026年7月17日に廃止予定と判明。これらを除外し、Ethereumのロードマップから独立した独自L1テストネットであるAvalanche Fujiに変更（EOL未発表）。詳細な比較根拠はREADME.md「9. セキュリティ上の注意」に記載。 |
+| コントラクト方式 | NFT Drop (DropERC721 + Lazy Mint + Claim Conditions) | 参照ブログのタグが`nft-drop`のため、これが最も整合。Open Edition/ERC1155や素のERC721 mintは不採用。 |
+| フロントエンド | Next.js 16.2.11 (App Router) + thirdweb SDK v5 + TypeScript | thirdweb公式テンプレートとの一致度を優先し、Viteより情報量で詰まりにくいNext.jsを選択。 |
+| Next.jsバージョン | **16.2.11で固定**（`latest`タグ） | 16.3は`preview`/`canary`タグでのみ配布されており、`latest`にはまだ乗っていない（2026年7月時点）。プレビュー版のAPI変更リスクを課題の締切前に負う理由がないため据え置き。**新しいNext.jsが出ていても、`npm view next dist-tags`で`latest`昇格を確認するまでは上げないこと。** |
+| TypeScript | **7.0.2**（`latest`タグ、Go移植ネイティブコンパイラ、2026年7月8日GA） | 当初 `^5.6.3` は未確認のまま決め打ちしていた不備。指摘を受けて`npm view typescript dist-tags`で確認し、6.0.3→最終的にユーザー指示で7.0.2に変更。 |
+
+### テストネットに関する既知の注意点（Avalanche Fuji移行後）
+
+- Chain ID: `43113`、ネイティブ通貨: AVAX（Sepolia時代のETH表記は全箇所AVAXに置換済み。`app/page.tsx`の価格表示、`.env.example`コメント、README全体を確認済み）。
+- RPC: `https://43113.rpc.thirdweb.com`（thirdweb公式）。Explorer: `https://testnet.snowtrace.io`。
+- faucet: thirdweb公式faucet（`https://thirdweb.com/avalanche-fuji`、0.01 AVAX/日）、Avalanche公式Core faucet。
+- `lib/client.ts`で`thirdweb/chains`から`avalancheFuji`をimportして使用（旧`sepolia`から変更済み）。exportの存在は`node_modules/thirdweb/dist/types/chains/chain-definitions/avalanche-fuji.d.ts`で実際に確認済み。
+- 現時点（2026年7月）でAvalanche FujiのEOL発表は確認されていないが、これも将来変わりうる前提情報なので、長期間放置したプロジェクトを再開する際は改めてWeb検索で現状を確認すること。
+
+### TypeScript 7系についての既知の注意点
+
+- `tsc --noEmit` は 6.0.3 / 7.0.2 の両方でクリーンに通ることを確認済み（サンドボックス内、`/tmp`のローカルディスク上で実施）。
+- ただし、Next.jsの内部型チェックや`typescript-eslint`が使う**プログラマティックAPI**（`typescript`パッケージをlibraryとしてimportする経路）の安定版は**7.1で提供予定**。2026年7月時点で7.1はnightly開発ビルド(`7.1.0-dev.*`)のみでGAしていない。
+- もし`npm run build`や`npm run lint`でTypeScript API起因の想定外のエラーが出た場合、`package.json`の`typescript`を`^6.0.3`に戻すのが安定な代替。7.1が正式GAしたら7系に統一してよい。
+
+---
+
+## 3. 検証状況（正直な現状）
+
+作業はCoworkのサンドボックス環境で行った。以下を確認済み:
+
+- ✅ `npm install` は完走する（このサンドボックスの`/tmp`ローカルディスク上で実施。**mount済みの`outputs`/ユーザー選択フォルダ側では、並列npm操作でatomic renameが頻繁にENOTEMPTYエラーになる既知の問題があった** — ネットワークマウント特有の制約とみられる。ローカルPCなら通常問題ない）。
+- ✅ `tsc --noEmit -p tsconfig.json` はエラーゼロ（TypeScript 6.0.3 / 7.0.2 両方で確認、Sepolia構成時点）。
+- ✅ thirdweb v5.120.1の実際の型宣言ファイル（`node_modules/thirdweb/dist/types/...`）と`ClaimButton`のprops・`claimTo`の引数型を直接突き合わせて一致を確認済み。`avalancheFuji`のexport存在も同様に確認済み。
+- ❌ **`next build`（SWCネイティブコンパイル部分）は未検証**。このサンドボックス環境固有の"Bus error (core dumped)"が、マウントされたファイルシステム上でも`/tmp`のローカルディスク上でも再現した。コードの問題ではなくサンドボックスのインフラ制約と判断しているが、確定的な証拠ではない。
+- ❌ **Avalanche Fujiへの切り替え後の`tsc --noEmit`再検証は未実施**。チェーン切り替えの差分は`lib/client.ts`のimport/export名の変更のみで型シグネチャ自体は変わらないはずだが、次にこのプロジェクトを触るときは`tsc --noEmit -p tsconfig.json`を再実行して確認すること。
+- ❌ `next lint` は未検証（このNext.jsバージョンでの`next lint`コマンドの挙動を確認できていない。エラーの場合はESLint CLIを直接使う`eslint .`に切り替えを検討）。
+
+**次にやること**: ローカルPCまたはVercelで`npm install && npm run build`を実際に実行し、上記の未検証部分を確認する。
+
+---
+
+## 4. 自分（AI）ではできない残作業（ユーザー本人がやる必要がある）
+
+秘密鍵での署名が必要なため、以下はAIが代行できない:
+
+1. thirdweb Dashboardでの Client ID 発行
+2. thirdweb Dashboardでの DropERC721 コントラクトのAvalanche Fujiへのデプロイ
+3. NFTメタデータのLazy Mint（アップロード）
+4. Claim Conditions（価格・供給数・期間）の設定
+5. `.env.local` への Client ID / コントラクトアドレスの設定
+6. GitHubへのpush（README section 6参照。リポジトリ名は`avalanche-fuji-nft-drop-studio`を推奨）
+7. Vercelへのデプロイ（README section 7参照）
+8. 実際にサイトからmintし、ウォレット/Snowtrace (testnet)で結果を確認した上での画面ショット撮影（README section 8のチェックリスト）
+
+---
+
+## 5. ディレクトリ構成
+
+```
+sepolia-nft-drop-studio/        # ← ディレクトリ名は旧称のまま（上記の注記参照）
+├── README.md              # 提出用ドキュメント本体（名称・説明・構成図・一覧表・手順・SS欄）
+├── CLAUDE.md              # このファイル（作業引き継ぎ用）
+├── package.json            # nameは"avalanche-fuji-nft-drop-studio"
+├── tsconfig.json
+├── next.config.mjs
+├── .env.example           # NEXT_PUBLIC_TEMPLATE_CLIENT_ID / NEXT_PUBLIC_NFT_DROP_CONTRACT_ADDRESS
+├── .gitignore             # node_modules, .env*, .next等を除外
+├── app/
+│   ├── layout.tsx          # title: "Avalanche Fuji NFT Drop Studio"
+│   ├── providers.tsx      # ThirdwebProviderでラップ
+│   ├── page.tsx           # ConnectButton + Claim Conditions表示 + ClaimButton（AVAX建て）
+│   └── globals.css
+├── lib/
+│   └── client.ts          # createThirdwebClient / getContract の初期化。chain = avalancheFuji
+└── docs/
+    └── architecture.mmd   # システム構成図のMermaidソース（Avalanche Fuji表記に更新済み、README内にも埋め込み済み）
+```
+
+---
+
+## 6. セキュリティ上、絶対に守ること
+
+- `.env.local`・秘密鍵・Secret Keyはコード/コミットに一切含めない（`.gitignore`で除外済み、方針を変えない）。
+- `NEXT_PUBLIC_`プレフィックスの変数はクライアントに公開される前提。Client IDのみこの形式で扱い、Secret Keyを`NEXT_PUBLIC_`にしない。
+- 取引の署名は常にユーザーのウォレット内で完結させる。サーバーサイドで秘密鍵を扱う実装を追加しない。
+
+---
+
+## 7. このファイルの更新方針
+
+技術選定を変更した場合（バージョンアップ、インフラ変更、コントラクト方式変更など）は、このファイルの該当セクションも同時に更新すること。README.mdは提出物としての完成形、CLAUDE.mdは意思決定の経緯と最新の未検証事項を追い続けるためのファイル。チェーンやテストネットを再度変更する場合は、変更対象ファイルの一覧（`lib/client.ts`のchain import、`app/page.tsx`のUI文言と価格通貨単位、`app/layout.tsx`のmetadata、`docs/architecture.mmd`、README全体、`.env.example`コメント）をこのファイルに残すこと。

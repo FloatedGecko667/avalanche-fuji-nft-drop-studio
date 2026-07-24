@@ -1,0 +1,26 @@
+flowchart LR
+    subgraph User["ユーザー環境"]
+        Browser["ブラウザ"]
+        Wallet["MetaMask等\nウォレット拡張"]
+    end
+
+    subgraph Vercel["Vercel（パブリッククラウド無料枠）"]
+        NextApp["Next.js App Router\n(avalanche-fuji-nft-drop-studio)\nthirdweb SDK v5"]
+    end
+
+    subgraph Thirdweb["thirdweb プラットフォーム"]
+        Dashboard["thirdweb Dashboard\n(コントラクト管理/Claim Conditions設定)"]
+        Storage["thirdweb Storage (IPFS)\nNFTメタデータ・画像"]
+    end
+
+    subgraph Chain["Avalanche Fuji テストネット"]
+        Contract["DropERC721 コントラクト\n(NFT Drop / Lazy Mint)"]
+    end
+
+    Browser -- "1. サイトにアクセス\n(git push -> 自動デプロイ)" --> NextApp
+    Browser -- "2. ウォレット接続" --> Wallet
+    NextApp -- "3. Client IDで初期化\nClaim Condition取得" --> Dashboard
+    Wallet -- "4. claim()トランザクションに署名" --> Contract
+    Contract -- "5. メタデータ参照" --> Storage
+    Dashboard -- "コントラクトのデプロイ/設定" --> Contract
+    Contract -- "6. Mint結果をイベント発行" --> Wallet
