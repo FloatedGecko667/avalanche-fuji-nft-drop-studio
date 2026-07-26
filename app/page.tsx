@@ -5,8 +5,8 @@ import { ConnectButton, useActiveAccount, useReadContract } from "thirdweb/react
 import { ClaimButton } from "thirdweb/react";
 import {
   getActiveClaimCondition,
-  nextTokenIdToMint,
-} from "thirdweb/extensions/erc721";
+  totalSupply,
+} from "thirdweb/extensions/erc1155";
 import { toEther, type ThirdwebClient } from "thirdweb";
 import { Providers } from "./providers";
 import { client, chain, nftDropContract } from "@/lib/client";
@@ -47,16 +47,22 @@ function MintCardWithContract({
   const account = useActiveAccount();
   const [quantity, setQuantity] = useState(1);
 
-  const { data: claimCondition, isLoading: isLoadingCondition } =
-    useReadContract(getActiveClaimCondition, { contract });
+  // This app mints all editions under a single token ID (0) — the
+  // contract is a DropERC1155 ("Edition Drop"), where one token ID
+  // represents one piece of unique content with a fixed supply.
+  const tokenId = 0n;
 
-  const { data: nextTokenId } = useReadContract(nextTokenIdToMint, {
+  const { data: claimCondition, isLoading: isLoadingCondition } =
+    useReadContract(getActiveClaimCondition, { contract, tokenId });
+
+  const { data: claimedSupply } = useReadContract(totalSupply, {
     contract,
+    id: tokenId,
   });
 
   const priceWei = claimCondition?.pricePerToken ?? 0n;
   const priceNative = toEther(priceWei);
-  const claimed = nextTokenId ?? 0n;
+  const claimed = claimedSupply ?? 0n;
   const maxSupply = claimCondition?.maxClaimableSupply ?? 0n;
 
   return (
@@ -69,7 +75,7 @@ function MintCardWithContract({
       <h1 style={{ margin: "16px 0 4px" }}>Avalanche Fuji NFT Drop Studio</h1>
       <p className="muted">
         オリジナルのデジタルコンテンツを数量限定・条件付きで配布するNFT
-        Dropです（thirdweb / ERC721A Lazy Mint / Avalanche Fuji）。
+        Dropです（thirdweb / DropERC1155 Lazy Mint / Avalanche Fuji）。
       </p>
 
       <div className="row">
@@ -105,7 +111,7 @@ function MintCardWithContract({
         client={client}
         chain={chain}
         contractAddress={contract.address}
-        claimParams={{ type: "ERC721", quantity: BigInt(quantity) }}
+        claimParams={{ type: "ERC1155", tokenId, quantity: BigInt(quantity) }}
         className="mint-btn"
         disabled={!account}
         onTransactionConfirmed={() => alert("Mint成功！ウォレットのNFTタブを確認してください。")}
