@@ -47,6 +47,10 @@ function shortenAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+function shortenTxHash(hash: string) {
+  return `${hash.slice(0, 10)}...${hash.slice(-6)}`;
+}
+
 function MintCardWithContract({
   client,
   contract,
@@ -57,8 +61,9 @@ function MintCardWithContract({
   const account = useActiveAccount();
   const [quantity, setQuantity] = useState(1);
   const [status, setStatus] = useState<
-    { type: "success" | "error"; message: string } | null
+    { type: "success" | "error"; message: string; txHash?: string } | null
   >(null);
+  const [addressCopied, setAddressCopied] = useState(false);
 
   // This app mints all editions under a single token ID (0) — the
   // contract is a DropERC1155 ("Edition Drop"), where one token ID
@@ -89,7 +94,18 @@ function MintCardWithContract({
     .filter((limit) => limit > 0n)
     .reduce((min, limit) => (limit < min ? limit : min), 5n);
 
+  const startTimestamp = claimCondition?.startTimestamp ?? 0n;
+  const nowSeconds = BigInt(Math.floor(Date.now() / 1000));
+  const notStartedYet = startTimestamp > 0n && nowSeconds < startTimestamp;
+  const startDate = new Date(Number(startTimestamp) * 1000);
+
   const explorerUrl = `https://testnet.snowtrace.io/address/${contract.address}`;
+
+  const copyContractAddress = async () => {
+    await navigator.clipboard.writeText(contract.address);
+    setAddressCopied(true);
+    setTimeout(() => setAddressCopied(false), 2000);
+  };
 
   return (
     <div className="card">
@@ -121,13 +137,21 @@ function MintCardWithContract({
 
       <div className="row">
         <span className="muted">Price</span>
-        <span>{isLoadingCondition ? "..." : `${priceNative} AVAX`}</span>
+        {isLoadingCondition ? (
+          <span className="skeleton skeleton-text" />
+        ) : (
+          <span>{priceNative} AVAX</span>
+        )}
       </div>
       <div className="row">
         <span className="muted">Claimed</span>
-        <span>
-          {claimed.toString()} / {maxSupply.toString()}
-        </span>
+        {isLoadingCondition ? (
+          <span className="skeleton skeleton-text" />
+        ) : (
+          <span>
+            {claimed.toString()} / {maxSupply.toString()}
+          </span>
+        )}
       </div>
       <div className="progress-track">
         <div
@@ -135,6 +159,13 @@ function MintCardWithContract({
           style={{ width: `${progressPercent}%` }}
         />
       </div>
+
+      {notStartedYet && (
+        <p className="muted status-pending">
+          このドロップはまだ開始していません（開始予定:{" "}
+          {startDate.toLocaleString("ja-JP")}）
+        </p>
+      )}
 
       <div className="row">
         <span className="muted">Quantity</span>
@@ -162,13 +193,26 @@ function MintCardWithContract({
 
       {status && (
         <div className={`status-banner status-${status.type}`}>
-          {status.message}
+          <p style={{ margin: 0 }}>{status.message}</p>
+          {status.txHash && (
+            <a
+              href={`https://testnet.snowtrace.io/tx/${status.txHash}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {shortenTxHash(status.txHash)} ↗
+            </a>
+          )}
         </div>
       )}
 
       {soldOut ? (
         <button className="mint-btn" disabled>
           Sold Out
+        </button>
+      ) : notStartedYet ? (
+        <button className="mint-btn" disabled>
+          まだ開始していません
         </button>
       ) : (
         <ClaimButton
@@ -178,10 +222,11 @@ function MintCardWithContract({
           claimParams={{ type: "ERC1155", tokenId, quantity: BigInt(quantity) }}
           className="mint-btn"
           disabled={!account}
-          onTransactionConfirmed={() =>
+          onTransactionConfirmed={(receipt) =>
             setStatus({
               type: "success",
               message: "Mint成功！ウォレットのNFTタブを確認してください。",
+              txHash: receipt.transactionHash,
             })
           }
           onError={(err) =>
@@ -192,12 +237,20 @@ function MintCardWithContract({
         </ClaimButton>
       )}
 
-      <p className="muted contract-link">
-        Contract:{" "}
+      <div className="contract-link">
+        <span className="muted">Contract: </span>
         <a href={explorerUrl} target="_blank" rel="noreferrer">
           {shortenAddress(contract.address)} ↗
         </a>
-      </p>
+        <button
+          type="button"
+          className="copy-btn"
+          onClick={copyContractAddress}
+          aria-label="Copy contract address"
+        >
+          {addressCopied ? "Copied!" : "Copy"}
+        </button>
+      </div>
     </div>
   );
 }

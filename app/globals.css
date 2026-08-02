@@ -106,6 +106,15 @@ button.mint-btn:disabled {
   padding: 10px 14px;
   border-radius: 10px;
   font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-banner a {
+  color: inherit;
+  text-decoration: underline;
+  align-self: flex-start;
 }
 
 .status-success {
@@ -123,6 +132,7 @@ button.mint-btn:disabled {
 .contract-link {
   margin-top: 16px;
   text-align: center;
+  font-size: 14px;
 }
 
 .contract-link a {
@@ -132,4 +142,51 @@ button.mint-btn:disabled {
 
 .contract-link a:hover {
   text-decoration: underline;
+}
+
+.copy-btn {
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.status-pending {
+  margin: -4px 0 12px;
+}
+
+.skeleton {
+  display: inline-block;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    var(--border) 25%,
+    rgba(154, 161, 173, 0.25) 50%,
+    var(--border) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-text {
+  width: 72px;
+  height: 14px;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
