@@ -10,14 +10,14 @@ import {
 import { ClaimButton } from "thirdweb/react";
 import {
   getActiveClaimCondition,
-  getNFT,
+  getNFTs,
   totalSupply,
 } from "thirdweb/extensions/erc1155";
-import { toEther, type ThirdwebClient } from "thirdweb";
+import { toEther, type ThirdwebClient, type NFT } from "thirdweb";
 import { Providers } from "./providers";
 import { client, chain, nftDropContract } from "@/lib/client";
 
-function MintCard() {
+function Gallery() {
   if (!client) {
     return (
       <div className="card">
@@ -40,7 +40,7 @@ function MintCard() {
     );
   }
 
-  return <MintCardWithContract client={client} contract={nftDropContract} />;
+  return <GalleryWithContract client={client} contract={nftDropContract} />;
 }
 
 function shortenAddress(address: string) {
@@ -51,26 +51,131 @@ function shortenTxHash(hash: string) {
   return `${hash.slice(0, 10)}...${hash.slice(-6)}`;
 }
 
-function MintCardWithContract({
+// Guesses a MediaRenderer-friendly mime type from a metadata image's file
+// extension. NFTs uploaded through the thirdweb Dashboard rarely set an
+// explicit mime type, and MediaRenderer's own auto-detection has been
+// unreliable in production for this app, so a best-effort extension check
+// is more dependable than leaving it undefined.
+function guessImageMimeType(url: string | null | undefined) {
+  const extension = url?.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "gif":
+      return "image/gif";
+    case "webp":
+      return "image/webp";
+    case "svg":
+      return "image/svg+xml";
+    default:
+      return undefined;
+  }
+}
+
+function GalleryWithContract({
   client,
   contract,
 }: {
   client: ThirdwebClient;
   contract: NonNullable<typeof nftDropContract>;
 }) {
+  const { data: nfts, isLoading } = useReadContract(getNFTs, {
+    contract,
+    start: 0,
+    count: 20,
+  });
+  const [addressCopied, setAddressCopied] = useState(false);
+
+  const copyContractAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(contract.address);
+      setAddressCopied(true);
+      setTimeout(() => setAddressCopied(false), 2000);
+    } catch {
+      // Clipboard access can be blocked by browser permissions; the
+      // address is still visible and selectable manually as a fallback.
+    }
+  };
+
+  return (
+    <>
+      <div className="row">
+        <span className="badge">Avalanche Fuji</span>
+        <ConnectButton client={client} chain={chain} />
+      </div>
+
+      <h1 className="page-title">Avalanche Fuji NFT Drop Studio</h1>
+      <p className="muted">
+        オリジナルのデジタルコンテンツを数量限定・条件付きで配布するNFT
+        Dropです（thirdweb / DropERC1155 Lazy Mint / Avalanche Fuji）。
+      </p>
+
+      {isLoading && (
+        <div className="card">
+          <span className="skeleton skeleton-text" />
+        </div>
+      )}
+
+      {!isLoading && (!nfts || nfts.length === 0) && (
+        <div className="card">
+          <p className="muted">
+            まだLazy MintされたNFTがありません。thirdweb DashboardでNFTを追加してください。
+          </p>
+        </div>
+      )}
+
+      <div className="gallery-grid">
+        {nfts?.map((nft) => (
+          <NftMintCard
+            key={nft.id.toString()}
+            client={client}
+            contract={contract}
+            nft={nft}
+          />
+        ))}
+      </div>
+
+      <div className="contract-link">
+        <span className="muted">Contract: </span>
+        <a
+          href={`https://testnet.snowtrace.io/address/${contract.address}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          {shortenAddress(contract.address)} ↗
+        </a>
+        <button
+          type="button"
+          className="copy-btn"
+          onClick={copyContractAddress}
+          aria-label="Copy contract address"
+        >
+          {addressCopied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+function NftMintCard({
+  client,
+  contract,
+  nft,
+}: {
+  client: ThirdwebClient;
+  contract: NonNullable<typeof nftDropContract>;
+  nft: NFT;
+}) {
   const account = useActiveAccount();
   const [quantity, setQuantity] = useState(1);
   const [status, setStatus] = useState<
     { type: "success" | "error"; message: string; txHash?: string } | null
   >(null);
-  const [addressCopied, setAddressCopied] = useState(false);
 
-  // This app mints all editions under a single token ID (0) — the
-  // contract is a DropERC1155 ("Edition Drop"), where one token ID
-  // represents one piece of unique content with a fixed supply.
-  const tokenId = 0n;
-
-  const { data: nft } = useReadContract(getNFT, { contract, tokenId });
+  const tokenId = nft.id;
 
   const { data: claimCondition, isLoading: isLoadingCondition } =
     useReadContract(getActiveClaimCondition, { contract, tokenId });
@@ -99,27 +204,9 @@ function MintCardWithContract({
   const notStartedYet = startTimestamp > 0n && nowSeconds < startTimestamp;
   const startDate = new Date(Number(startTimestamp) * 1000);
 
-  const explorerUrl = `https://testnet.snowtrace.io/address/${contract.address}`;
-
-  const copyContractAddress = async () => {
-    try {
-      await navigator.clipboard.writeText(contract.address);
-      setAddressCopied(true);
-      setTimeout(() => setAddressCopied(false), 2000);
-    } catch {
-      // Clipboard access can be blocked by browser permissions; the
-      // address is still visible and selectable manually as a fallback.
-    }
-  };
-
   return (
     <div className="card">
-      <div className="row">
-        <span className="badge">Avalanche Fuji</span>
-        <ConnectButton client={client} chain={chain} />
-      </div>
-
-      {nft?.metadata.image && (
+      {nft.metadata.image && (
         <div className="media-frame">
           <MediaRenderer
             client={client}
@@ -127,18 +214,17 @@ function MintCardWithContract({
             alt={nft.metadata.name ?? "NFT preview"}
             width="100%"
             height="auto"
-            mimeType="image/png"
+            mimeType={guessImageMimeType(nft.metadata.image)}
           />
         </div>
       )}
 
-      <h1 style={{ margin: "16px 0 4px" }}>
-        {nft?.metadata.name ?? "Avalanche Fuji NFT Drop Studio"}
-      </h1>
-      <p className="muted">
-        オリジナルのデジタルコンテンツを数量限定・条件付きで配布するNFT
-        Dropです（thirdweb / DropERC1155 Lazy Mint / Avalanche Fuji）。
-      </p>
+      <h2 style={{ margin: "16px 0 4px" }}>
+        {nft.metadata.name ?? `Token #${tokenId.toString()}`}
+      </h2>
+      {nft.metadata.description && (
+        <p className="muted">{nft.metadata.description}</p>
+      )}
 
       <div className="row">
         <span className="muted">Price</span>
@@ -241,21 +327,6 @@ function MintCardWithContract({
           {account ? "Mint（Claim）する" : "先にウォレットを接続してください"}
         </ClaimButton>
       )}
-
-      <div className="contract-link">
-        <span className="muted">Contract: </span>
-        <a href={explorerUrl} target="_blank" rel="noreferrer">
-          {shortenAddress(contract.address)} ↗
-        </a>
-        <button
-          type="button"
-          className="copy-btn"
-          onClick={copyContractAddress}
-          aria-label="Copy contract address"
-        >
-          {addressCopied ? "Copied!" : "Copy"}
-        </button>
-      </div>
     </div>
   );
 }
@@ -264,7 +335,7 @@ export default function Home() {
   return (
     <Providers>
       <main>
-        <MintCard />
+        <Gallery />
       </main>
     </Providers>
   );
