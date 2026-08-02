@@ -1,10 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { ConnectButton, useActiveAccount, useReadContract } from "thirdweb/react";
+import {
+  ConnectButton,
+  MediaRenderer,
+  useActiveAccount,
+  useReadContract,
+} from "thirdweb/react";
 import { ClaimButton } from "thirdweb/react";
 import {
   getActiveClaimCondition,
+  getNFT,
   totalSupply,
 } from "thirdweb/extensions/erc1155";
 import { toEther, type ThirdwebClient } from "thirdweb";
@@ -37,6 +43,10 @@ function MintCard() {
   return <MintCardWithContract client={client} contract={nftDropContract} />;
 }
 
+function shortenAddress(address: string) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
 function MintCardWithContract({
   client,
   contract,
@@ -46,11 +56,16 @@ function MintCardWithContract({
 }) {
   const account = useActiveAccount();
   const [quantity, setQuantity] = useState(1);
+  const [status, setStatus] = useState<
+    { type: "success" | "error"; message: string } | null
+  >(null);
 
   // This app mints all editions under a single token ID (0) — the
   // contract is a DropERC1155 ("Edition Drop"), where one token ID
   // represents one piece of unique content with a fixed supply.
   const tokenId = 0n;
+
+  const { data: nft } = useReadContract(getNFT, { contract, tokenId });
 
   const { data: claimCondition, isLoading: isLoadingCondition } =
     useReadContract(getActiveClaimCondition, { contract, tokenId });
@@ -64,6 +79,17 @@ function MintCardWithContract({
   const priceNative = toEther(priceWei);
   const claimed = claimedSupply ?? 0n;
   const maxSupply = claimCondition?.maxClaimableSupply ?? 0n;
+  const remaining = maxSupply > claimed ? maxSupply - claimed : 0n;
+  const soldOut = maxSupply > 0n && remaining === 0n;
+  const progressPercent =
+    maxSupply > 0n ? Math.min(100, Number((claimed * 100n) / maxSupply)) : 0;
+
+  const perWalletLimit = claimCondition?.quantityLimitPerWallet ?? 0n;
+  const maxQuantity = [5n, remaining, perWalletLimit]
+    .filter((limit) => limit > 0n)
+    .reduce((min, limit) => (limit < min ? limit : min), 5n);
+
+  const explorerUrl = `https://testnet.snowtrace.io/address/${contract.address}`;
 
   return (
     <div className="card">
@@ -72,7 +98,15 @@ function MintCardWithContract({
         <ConnectButton client={client} chain={chain} />
       </div>
 
-      <h1 style={{ margin: "16px 0 4px" }}>Avalanche Fuji NFT Drop Studio</h1>
+      {nft?.metadata.image && (
+        <div className="media-frame">
+          <MediaRenderer client={client} src={nft.metadata.image} />
+        </div>
+      )}
+
+      <h1 style={{ margin: "16px 0 4px" }}>
+        {nft?.metadata.name ?? "Avalanche Fuji NFT Drop Studio"}
+      </h1>
       <p className="muted">
         オリジナルのデジタルコンテンツを数量限定・条件付きで配布するNFT
         Dropです（thirdweb / DropERC1155 Lazy Mint / Avalanche Fuji）。
@@ -88,14 +122,26 @@ function MintCardWithContract({
           {claimed.toString()} / {maxSupply.toString()}
         </span>
       </div>
+      <div className="progress-track">
+        <div
+          className="progress-fill"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+
       <div className="row">
         <span className="muted">Quantity</span>
         <input
           type="number"
           min={1}
-          max={5}
+          max={Number(maxQuantity)}
           value={quantity}
-          onChange={(e) => setQuantity(Number(e.target.value))}
+          disabled={soldOut}
+          onChange={(e) =>
+            setQuantity(
+              Math.min(Math.max(1, Number(e.target.value)), Number(maxQuantity)),
+            )
+          }
           style={{
             width: 64,
             padding: 8,
@@ -107,18 +153,44 @@ function MintCardWithContract({
         />
       </div>
 
-      <ClaimButton
-        client={client}
-        chain={chain}
-        contractAddress={contract.address}
-        claimParams={{ type: "ERC1155", tokenId, quantity: BigInt(quantity) }}
-        className="mint-btn"
-        disabled={!account}
-        onTransactionConfirmed={() => alert("Mint成功！ウォレットのNFTタブを確認してください。")}
-        onError={(err) => alert(`Mint失敗: ${err.message}`)}
-      >
-        {account ? "Mint（Claim）する" : "先にウォレットを接続してください"}
-      </ClaimButton>
+      {status && (
+        <div className={`status-banner status-${status.type}`}>
+          {status.message}
+        </div>
+      )}
+
+      {soldOut ? (
+        <button className="mint-btn" disabled>
+          Sold Out
+        </button>
+      ) : (
+        <ClaimButton
+          client={client}
+          chain={chain}
+          contractAddress={contract.address}
+          claimParams={{ type: "ERC1155", tokenId, quantity: BigInt(quantity) }}
+          className="mint-btn"
+          disabled={!account}
+          onTransactionConfirmed={() =>
+            setStatus({
+              type: "success",
+              message: "Mint成功！ウォレットのNFTタブを確認してください。",
+            })
+          }
+          onError={(err) =>
+            setStatus({ type: "error", message: `Mint失敗: ${err.message}` })
+          }
+        >
+          {account ? "Mint（Claim）する" : "先にウォレットを接続してください"}
+        </ClaimButton>
+      )}
+
+      <p className="muted contract-link">
+        Contract:{" "}
+        <a href={explorerUrl} target="_blank" rel="noreferrer">
+          {shortenAddress(contract.address)} ↗
+        </a>
+      </p>
     </div>
   );
 }
