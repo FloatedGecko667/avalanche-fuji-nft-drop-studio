@@ -100,7 +100,14 @@ function MintCardWithContract({
 
       {nft?.metadata.image && (
         <div className="media-frame">
-          <MediaRenderer client={client} src={nft.metadata.image} />
+          <MediaRenderer
+            client={client}
+            src={nft.metadata.image}
+            alt={nft.metadata.name ?? "NFT preview"}
+            width="100%"
+            height="auto"
+            mimeType="image/png"
+          />
         </div>
       )}
 
