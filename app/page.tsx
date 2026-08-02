@@ -102,9 +102,14 @@ function MintCardWithContract({
   const explorerUrl = `https://testnet.snowtrace.io/address/${contract.address}`;
 
   const copyContractAddress = async () => {
-    await navigator.clipboard.writeText(contract.address);
-    setAddressCopied(true);
-    setTimeout(() => setAddressCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(contract.address);
+      setAddressCopied(true);
+      setTimeout(() => setAddressCopied(false), 2000);
+    } catch {
+      // Clipboard access can be blocked by browser permissions; the
+      // address is still visible and selectable manually as a fallback.
+    }
   };
 
   return (
