@@ -10,7 +10,9 @@
 
 大学(?)の課題として、Web3フレームワーク thirdweb を使ったNFT発行（Minting）サイトを作る。参照資料は thirdweb blog の `tag/nft-drop`。テストネット推奨、メインネット不使用。
 
-**確定した用途**: 自分で用意したユニークなデジタルコンテンツを、数量限定・条件付き（Claim Conditionsのallowlist/供給数上限/配布期間）で配布する。ERC1155 Open Editionのような「同一コンテンツの無制限配布」ではなく、DropERC721で1トークンごとに固有メタデータを持たせる前提。README.md「1. 作ったものの説明」および`app/page.tsx`のサイト上コピーに反映済み。
+**確定した用途**: 自分で用意したユニークなデジタルコンテンツを、数量限定・条件付き（Claim Conditionsのallowlist/供給数上限/配布期間）で配布する。ERC1155 Open Editionのような「同一コンテンツの無制限配布」ではなく、トークンID（コンテンツ）ごとに個別のClaim Conditionsを持たせる前提。README.md「1. 作ったものの説明」および`app/page.tsx`のサイト上コピーに反映済み。
+
+**重要: 実際にデプロイしたコントラクトは`DropERC721`ではなく`DropERC1155`。** 詳細は下記「2. 確定した技術方針」の表と「3. 検証状況」を参照。当初`DropERC721`を想定していたが、thirdweb DashboardのUIが「NFT Drop (ERC721A)」から「NFT Collection」に統合されており、このテンプレートは実際には`DropERC1155`（Edition Drop）をデプロイする。フロントエンドは1トークンID＝1コンテンツとして扱うことで、当初のコンセプト（限定コレクティブル配布）を維持している。
 
 提出要件（変更しないこと）:
 - 作ったものの名称
@@ -28,7 +30,7 @@
 |---|---|---|
 | インフラ | Vercel（無料枠） | フロントはサーバーサイドで秘密鍵・機密情報を扱わない（非カストディアル）。バックエンドAPI/DBが不要なため、CLAUDE.mdグローバル方針の「プライベートクラウド前提の場合はDocker Compose/K8s必須」という条件が非適用と判断。バックエンドを追加する要件が生じたら、Oracle Cloud Free Tire + Docker Composeに切り替える。 |
 | テストネット | **Avalanche Fuji**（Chain ID 43113）。旧: Ethereum Sepolia | 当初はSepoliaを採用したが、Ethereum FoundationがSepoliaのEOLを2026年9月30日頃と発表していることが判明。Base/Arbitrum/Optimism SepoliaはSepoliaをL1決済層とするため同じ影響を受け、Hoodiはdapp開発非推奨（公式にSepolia利用を推奨）、Polygon AmoyはSepoliaをroot chainとするチェックポイント依存構造かつ執筆時点で公式無料RPCが2026年7月17日に廃止予定と判明。これらを除外し、Ethereumのロードマップから独立した独自L1テストネットであるAvalanche Fujiに変更（EOL未発表）。詳細な比較根拠はREADME.md「9. セキュリティ上の注意」に記載。 |
-| コントラクト方式 | NFT Drop (DropERC721 + Lazy Mint + Claim Conditions) | 参照ブログのタグが`nft-drop`のため、これが最も整合。Open Edition/ERC1155や素のERC721 mintは不採用。 |
+| コントラクト方式 | **DropERC1155**（NFT Collection + Lazy Mint + Claim Conditions） | 当初`DropERC721`（`nft-drop`タグに整合）を想定していたが、thirdweb Dashboardの「NFT Collection」テンプレートが実際にデプロイするのはDropERC1155だったため、これに合わせてフロントエンドを書き換えた（`thirdweb/extensions/erc1155`使用、tokenIdごとにClaim Conditions/Supplyを管理）。Dashboard上でコントラクトの`contractType()`を直接呼び出し`0x44726f7045524331313535`（ASCII: "DropERC1155"）であることを実機で確認済み。 |
 | フロントエンド | Next.js 16.2.11 (App Router) + thirdweb SDK v5 + TypeScript | thirdweb公式テンプレートとの一致度を優先し、Viteより情報量で詰まりにくいNext.jsを選択。 |
 | Next.jsバージョン | **16.2.11で固定**（`latest`タグ） | 16.3は`preview`/`canary`タグでのみ配布されており、`latest`にはまだ乗っていない（2026年7月時点）。プレビュー版のAPI変更リスクを課題の締切前に負う理由がないため据え置き。**新しいNext.jsが出ていても、`npm view next dist-tags`で`latest`昇格を確認するまでは上げないこと。** |
 | TypeScript | **7.0.2**（`latest`タグ、Go移植ネイティブコンパイラ、2026年7月8日GA） | 当初 `^5.6.3` は未確認のまま決め打ちしていた不備。指摘を受けて`npm view typescript dist-tags`で確認し、6.0.3→最終的にユーザー指示で7.0.2に変更。 |
@@ -49,33 +51,30 @@
 
 ---
 
-## 3. 検証状況（正直な現状）
+## 3. 検証状況（2026年7月26日時点、実機検証済み）
 
-作業はCoworkのサンドボックス環境で行った。以下を確認済み:
+ローカルPC（macOS, Node v26.5.x）とVercel本番環境の両方で実際に検証済み。
 
-- ✅ `npm install` は完走する（このサンドボックスの`/tmp`ローカルディスク上で実施。**mount済みの`outputs`/ユーザー選択フォルダ側では、並列npm操作でatomic renameが頻繁にENOTEMPTYエラーになる既知の問題があった** — ネットワークマウント特有の制約とみられる。ローカルPCなら通常問題ない）。
-- ✅ `tsc --noEmit -p tsconfig.json` はエラーゼロ（TypeScript 6.0.3 / 7.0.2 両方で確認、Sepolia構成時点）。
-- ✅ thirdweb v5.120.1の実際の型宣言ファイル（`node_modules/thirdweb/dist/types/...`）と`ClaimButton`のprops・`claimTo`の引数型を直接突き合わせて一致を確認済み。`avalancheFuji`のexport存在も同様に確認済み。
-- ❌ **`next build`（SWCネイティブコンパイル部分）は未検証**。このサンドボックス環境固有の"Bus error (core dumped)"が、マウントされたファイルシステム上でも`/tmp`のローカルディスク上でも再現した。コードの問題ではなくサンドボックスのインフラ制約と判断しているが、確定的な証拠ではない。
-- ❌ **Avalanche Fujiへの切り替え後の`tsc --noEmit`再検証は未実施**。チェーン切り替えの差分は`lib/client.ts`のimport/export名の変更のみで型シグネチャ自体は変わらないはずだが、次にこのプロジェクトを触るときは`tsc --noEmit -p tsconfig.json`を再実行して確認すること。
-- ❌ `next lint` は未検証（このNext.jsバージョンでの`next lint`コマンドの挙動を確認できていない。エラーの場合はESLint CLIを直接使う`eslint .`に切り替えを検討）。
-
-**次にやること**: ローカルPCまたはVercelで`npm install && npm run build`を実際に実行し、上記の未検証部分を確認する。
+- ✅ `npm install` 完走（初回は同一ディレクトリに残っていた壊れた`package-lock.json`が原因で`Invalid Version`エラーが発生したが、`--no-package-lock`で回避し再生成して解消）。
+- ✅ `tsc --noEmit -p tsconfig.json` エラーゼロ。
+- ✅ `next build`（Turbopack）成功。ローカル・Vercel本番ビルドの両方で確認済み（サンドボックス特有の"Bus error"は実機では再現しなかった）。
+- ✅ TypeScript 7.0.2使用中に、Next.jsの内部TypeScript検出ロジックが誤動作し`next build`が謎の`The "id" argument must be of type string`エラーで失敗する事象を確認。本ファイル44行目に記載の対処法どおり`^6.0.3`にダウングレードして解消（7.1安定版が出るまでこのままにする）。
+- ✅ thirdweb依存の`@coinbase/cdp-sdk`が使わないx402決済機能向けに未公開の`@x402/*`パッケージを動的import しており、ビルドを妨げていた。`next.config.mjs`でwebpack/turbopack双方に`resolveAlias`を設定し、`lib/x402-stub.js`という空スタブに差し替えて解消（コメントで経緯を記載済み）。
+- ✅ `app/page.tsx`の実コードバグ（`nftDropContract!`の非null断定）がprerenderをクラッシュさせていたのを、コンポーネント分割で解消。
+- ✅ **コントラクトを実際にAvalanche Fuji上へデプロイ済み**: アドレス `0x1D7C388c8cee7A2315EEe5670203574bb393B17e`（`contractType()`実行でDropERC1155と確認済み）。テスト画像（Cliffordストレンジアトラクタの生成アート）をLazy Mint、Price 0 AVAX / Supply 1000でClaim Conditions設定済み。
+- ✅ GitHubへpush済み、Vercel本番デプロイ済み、環境変数（Client ID・コントラクトアドレス）設定済み。サイトが実際に価格・Claimed数・NFT画像プレビューを正しく表示することをブラウザで確認済み。
+- ❌ **実際のウォレットでのmintトランザクション実行・提出用スクリーンショット撮影は未実施**（README section 8）。秘密鍵の署名が必要なためAIは代行できない。次回作業時はここから再開する。
+- ❌ `next lint` は未検証。
 
 ---
 
 ## 4. 自分（AI）ではできない残作業（ユーザー本人がやる必要がある）
 
-秘密鍵での署名が必要なため、以下はAIが代行できない:
+以下は完了済み: thirdweb Client ID発行・コントラクトデプロイ・Lazy Mint・Claim Conditions設定・`.env.local`/Vercel環境変数設定・GitHubへのpush・Vercelへのデプロイ。
 
-1. thirdweb Dashboardでの Client ID 発行
-2. thirdweb Dashboardでの DropERC721 コントラクトのAvalanche Fujiへのデプロイ
-3. NFTメタデータのLazy Mint（アップロード）
-4. Claim Conditions（価格・供給数・期間）の設定
-5. `.env.local` への Client ID / コントラクトアドレスの設定
-6. GitHubへのpush（README section 6参照。リポジトリ名は`avalanche-fuji-nft-drop-studio`を推奨）
-7. Vercelへのデプロイ（README section 7参照）
-8. 実際にサイトからmintし、ウォレット/Snowtrace (testnet)で結果を確認した上での画面ショット撮影（README section 8のチェックリスト）
+残っているのは秘密鍵の署名が必要な最後の1点のみ:
+
+1. 実際に自分のウォレット（MetaMask等）でサイトからmintし、MetaMaskの署名ダイアログ・mint成功画面・Snowtrace (testnet)上でのNFT確認画面のスクリーンショットを撮影する（README section 8のチェックリスト）
 
 ---
 
@@ -90,15 +89,17 @@ sepolia-nft-drop-studio/        # ← ディレクトリ名は旧称のまま（
 ├── next.config.mjs
 ├── .env.example           # NEXT_PUBLIC_TEMPLATE_CLIENT_ID / NEXT_PUBLIC_NFT_DROP_CONTRACT_ADDRESS
 ├── .gitignore             # node_modules, .env*, .next等を除外
+├── next.config.mjs        # x402スタブのwebpack/turbopack resolveAlias設定を含む
 ├── app/
 │   ├── layout.tsx          # title: "Avalanche Fuji NFT Drop Studio"
 │   ├── providers.tsx      # ThirdwebProviderでラップ
-│   ├── page.tsx           # ConnectButton + Claim Conditions表示 + ClaimButton（AVAX建て）
+│   ├── page.tsx           # NFTギャラリー（getNFTsで全トークン取得→各トークンごとにMintカード）
 │   └── globals.css
 ├── lib/
-│   └── client.ts          # createThirdwebClient / getContract の初期化。chain = avalancheFuji
+│   ├── client.ts          # createThirdwebClient / getContract の初期化。chain = avalancheFuji
+│   └── x402-stub.js       # thirdweb依存が使わないx402決済機能の空スタブ（ビルド回避用）
 └── docs/
-    └── architecture.mmd   # システム構成図のMermaidソース（Avalanche Fuji表記に更新済み、README内にも埋め込み済み）
+    └── architecture.mmd   # システム構成図のMermaidソース（DropERC1155表記に更新済み、README内にも埋め込み済み）
 ```
 
 ---

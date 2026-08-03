@@ -1,6 +1,8 @@
 # Avalanche Fuji NFT Drop Studio
 
-Web3フレームワーク [thirdweb](https://thirdweb.com/) を用いた、Avalanche Fujiテストネット向けのNFT発行（Minting）サイトです。thirdwebの [NFT Drop](https://blog.thirdweb.com/tag/nft-drop/) 機能（DropERC721 + Lazy Mint + Claim Conditions）を使い、ユーザーが自分のウォレットを接続してNFTをclaim（mint）できる公開サイトとして構成しています。
+Web3フレームワーク [thirdweb](https://thirdweb.com/) を用いた、Avalanche Fujiテストネット向けのNFT発行（Minting）サイトです。thirdwebの NFT Collection（`DropERC1155` + Lazy Mint + Claim Conditions）を使い、ユーザーが自分のウォレットを接続してNFTをclaim（mint）できる公開サイトとして構成しています。
+
+> **コントラクト方式についての補足**: 開発当初はthirdwebブログの`nft-drop`タグに合わせて`DropERC721`を想定していましたが、実際にthirdweb Dashboardから「NFT Collection」テンプレートでデプロイしたところ、内部的には`DropERC1155`（Edition Drop）としてデプロイされることが判明しました（thirdweb側でUI・テンプレート統合が行われたため）。`DropERC1155`は1つのトークンIDに対して複数枚（Supply）を発行できる方式で、フロントエンドは1トークンID＝1コンテンツとして扱うことで、当初想定していた「限定コレクティブル配布」のコンセプトを維持しています。複数のユニークなコンテンツを追加したい場合は、Lazy Mintで別のトークンIDを追加するだけで、サイトのギャラリーに自動的に並びます（コード変更不要）。
 
 コントラクトのデプロイやClaim Conditionsの設定は [thirdweb Dashboard](https://thirdweb.com/login?next=%2Fteam%3Fref%3Dblog.thirdweb.com) で行います（要ログイン／要ウォレット接続）。使い方は「5.3 thirdweb Dashboardでの準備」で詳しく説明します。
 
@@ -12,7 +14,7 @@ Web3フレームワーク [thirdweb](https://thirdweb.com/) を用いた、Avala
 
 ### 用途
 
-自分で用意したユニークなデジタルコンテンツ（画像等）を、**数量限定・条件付き**で配布するためのサイトです。`DropERC721`はトークン1つごとに固有メタデータを持つ方式（ERC1155 Open Editionのような「全員同じ画像を無制限配布」ではない）なので、限定コレクティブルの配布という用途にそのまま対応します。
+自分で用意したユニークなデジタルコンテンツ（画像等）を、**数量限定・条件付き**で配布するためのサイトです。トークンID（コンテンツ）ごとに個別のClaim Conditionsを設定できるため、「全員同じ画像を無制限配布」ではなく、限定コレクティブルの配布という用途に対応します。
 
 - **数量限定**: Claim Conditionsの `maxClaimableSupply` で総発行数の上限を設定する。上限に達するとそれ以上claimできない。
 - **条件付き配布**: Claim Conditionsのallowlist機能を使い、特定のウォレットアドレスのみがclaimできるように制限できる。配布開始日時・終了日時、1ウォレットあたりの上限枚数も設定可能。
@@ -21,7 +23,7 @@ Web3フレームワーク [thirdweb](https://thirdweb.com/) を用いた、Avala
 ### 動作の流れ
 
 - ユーザーはブラウザでサイトにアクセスし、MetaMask等のウォレットを接続する。
-- サイトはthirdweb Dashboardで事前にデプロイ済みの `DropERC721` コントラクト（Avalanche Fuji上）に対して、現在のClaim Conditions（価格・残り供給数・期間等）を読み取り、画面に表示する。
+- サイトはthirdweb Dashboardで事前にデプロイ済みの `DropERC1155` コントラクト（Avalanche Fuji上）に対して、Lazy Mintされている全トークンを取得し、それぞれの現在のClaim Conditions（価格・残り供給数・期間等）を読み取ってギャラリー形式で表示する。
 - ユーザーが「Mint（Claim）する」ボタンを押すと、ウォレットで `claim()` トランザクションへの署名を求められ、承認するとAvalanche Fuji上でNFTが発行され、ユーザーのウォレットに送られる。
 - NFTの画像・メタデータは、thirdweb Dashboardでの事前アップロード時にthirdweb Storage（IPFS）へ保存されており、サイト自体はその参照のみを扱う。
 - フロントエンド（Next.js）はサーバーサイドで秘密鍵や機密情報を一切扱わない。取引の署名は常にユーザーのウォレット内で完結する（非カストディアル）。
@@ -48,20 +50,22 @@ flowchart LR
     end
 
     subgraph Thirdweb["thirdweb プラットフォーム"]
-        Dashboard["thirdweb Dashboard\n(コントラクト管理/Claim Conditions設定)"]
+        Dashboard["thirdweb Dashboard\n(コントラクトのデプロイ/Lazy Mint/\nClaim Conditions設定)"]
+        RPC["thirdweb RPC\n(43113.rpc.thirdweb.com)"]
         Storage["thirdweb Storage (IPFS)\nNFTメタデータ・画像"]
     end
 
     subgraph Chain["Avalanche Fuji テストネット"]
-        Contract["DropERC721 コントラクト\n(NFT Drop / Lazy Mint)"]
+        Contract["DropERC1155 コントラクト\n(NFT Collection / Lazy Mint)"]
     end
 
     Browser -- "1. サイトにアクセス\n(git push -> 自動デプロイ)" --> NextApp
     Browser -- "2. ウォレット接続" --> Wallet
-    NextApp -- "3. Client IDで初期化\nClaim Condition取得" --> Dashboard
+    NextApp -- "3. Client IDで初期化\ngetNFTs / Claim Condition取得" --> RPC
+    RPC -- "読み取り" --> Contract
     Wallet -- "4. claim()トランザクションに署名" --> Contract
     Contract -- "5. メタデータ参照" --> Storage
-    Dashboard -- "コントラクトのデプロイ/設定" --> Contract
+    Dashboard -- "事前準備:\nコントラクトのデプロイ/設定" --> Contract
     Contract -- "6. Mint結果をイベント発行" --> Wallet
 ```
 
@@ -77,7 +81,7 @@ GitHub上ではMermaidブロックはそのまま図として描画されます�
 | Web3フレームワーク | thirdweb SDK v5 | ウォレット接続・コントラクト読み書きのReactコンポーネント/フック提供 | 無料枠 |
 | Web3管理コンソール | thirdweb Dashboard | コントラクトのデプロイ、Lazy Mint、Claim Conditions設定 | 無料枠 |
 | 分散ストレージ | thirdweb Storage (IPFS) | NFT画像・メタデータの保存 | 無料枠 |
-| ブロックチェーン | Avalanche Fuji Testnet（Chain ID 43113） | NFT(DropERC721)コントラクトの実行環境 | テストネット（無料） |
+| ブロックチェーン | Avalanche Fuji Testnet（Chain ID 43113） | NFT(DropERC1155)コントラクトの実行環境 | テストネット（無料） |
 | フロントエンドフレームワーク | Next.js 16 (App Router) | UI実装、ビルドパイプライン | OSS |
 | 言語 | TypeScript 7 | 型安全な実装 | OSS |
 | ウォレット | MetaMask（ユーザー側） | トランザクション署名 | 無料 |
@@ -88,10 +92,8 @@ GitHub上ではMermaidブロックはそのまま図として描画されます�
 ## 4. ソースコードの確認先URL
 
 ```
-（GitHubにpush後、このリポジトリのURLをここに記載してください。例: https://github.com/<your-account>/avalanche-fuji-nft-drop-studio）
+https://github.com/FloatedGecko667/avalanche-fuji-nft-drop-studio
 ```
-
-pushの手順は本READMEの「6. GitHubへの公開手順」を参照してください。
 
 ---
 
@@ -170,30 +172,26 @@ Avalanche Fujiのガス代（テストAVAX）は無料のfaucetから入手し�
 3. 発行される **Client ID** と **Secret Key** のうち、フロントエンドで使うのはClient IDのみ。**Secret Keyは絶対にこのリポジトリやフロントエンドコードに書かず、誰にも共有しない**（Secret Keyはサーバーサイドでの特権操作用で、漏洩するとアカウントの全サービスにアクセスされる）。
 4. Client IDを控える（後述の`.env.local`で使用）。
 
-#### 5.3.2 NFT Dropコントラクトのデプロイ
+#### 5.3.2 NFT Collectionコントラクトのデプロイ（コンテンツ登録・Claim Conditions設定込み）
 
-1. Dashboardの **Contracts** ページから「Deploy new contract」→ Explore（コントラクト一覧）を開く。
-2. **NFT Drop (ERC721A)** を選択する。
-3. コントラクトのメタデータ（名前、シンボル、説明、ロイヤリティ設定等）を入力する。
-4. デプロイ先ネットワークとして **Avalanche Fuji** を選択し、デプロイを実行する（MetaMaskで署名・ガス代の消費が発生する。5.2.3で入手したテストAVAXを使用）。
-5. デプロイ完了後に表示される**コントラクトアドレス**をコピーしておく（後述の`.env.local`で使用）。
+thirdweb Dashboardは現在「作成ウィザード」形式になっており、コントラクトのデプロイ・Lazy Mint・Claim Conditions設定が1つの流れでまとめて行えます。
 
-#### 5.3.3 デジタルコンテンツのLazy Mint（アップロード）
+1. プロジェクトの **Tokens** ページ（または左上メニュー）から「**Create Token**」→「**NFT Collection**」を選択する。
+   - 選択画面には「ERC-721 or ERC-1155」と書かれているが、実際に生成されるコントラクトは`DropERC1155`（1トークンID＝1コンテンツ、Supplyで発行枚数を指定する方式）である。
+2. **Collection Info**: 名前・シンボル・チェーン（**Avalanche Fuji Testnet**を選択）・説明を入力し、「Next」。
+3. **Upload NFTs**: 「Create Single」で、自分で用意したユニークな画像ファイルとName/Description/Price/Supplyを入力する（複数コンテンツを配布したい場合は「Create Multiple」を使うか、後から本手順を繰り返して追加トークンIDとして登録できる。追加するとサイトのギャラリーに自動的に並ぶ）。
+4. **Sales and Fees**: Primary Sales RecipientとRoyalties Recipientに自分のウォレットアドレスを入力する（空欄のままだと「Invalid address」エラーになる場合がある）。
+5. 最終確認画面で内容を確認し、「**Launch NFT Collection**」を押す。ここでコントラクトのデプロイ・Lazy Mint・Claim Conditionsの初期設定（Price / Supply）がまとめて実行され、ガス代の消費が発生する（5.2.3で入手したテストAVAXを使用。合計で0.01〜0.02 AVAX程度必要になることがある）。
+6. 完了後に表示される**コントラクトアドレス**をコピーしておく（後述の`.env.local`で使用）。
 
-1. デプロイしたコントラクトの管理画面を開く。
-2. **NFTs** タブから、自分で用意したユニークな画像ファイル一式（配布したい点数分）とメタデータ（名前・説明・属性など）を **Lazy Mint** 機能で一括アップロードする。CSV/フォルダ単位の一括アップロードにも対応している。
-3. 画像は1枚ずつ異なる内容にしておくこと（同一画像の大量複製は、限定コレクティブルという用途の趣旨に反する）。
+#### 5.3.3 Claim Conditionsの追加設定（数量限定・条件付き配布）
 
-#### 5.3.4 Claim Conditionsの設定（数量限定・条件付き配布の中核）
-
-1. **Claim Conditions** タブを開き、「Add Initial Claim Phase」（初期フェーズの追加）から設定する。
-2. 主な設定項目:
-   - **Max Claimable Supply**: 配布する総数の上限（5.3.3でアップロードした点数以下にする）。
-   - **Allowlist**（任意）: 特定のウォレットアドレスのみにclaimを許可する場合、対象アドレスをここに登録する。allowlist内のアドレスごとに価格や上限枚数を個別に上書きすることも可能。
-   - **価格**: テストなら0 AVAXでも可。
-   - **配布開始日時 / 終了日時**: 期間限定配布にする場合に設定。
+5.3.2のウィザードで設定したPrice/Supplyが基本のClaim Conditionsになる。allowlistや配布期間などより詳細な条件を設定したい場合は、コントラクト管理画面の該当トークンから設定を編集する。
+   - **Max Claimable Supply**: 5.3.2で入力したSupply。
+   - **Allowlist**（任意）: 特定のウォレットアドレスのみにclaimを許可する場合、対象アドレスを登録する。
+   - **配布開始日時 / 終了日時**: 期間限定配布にする場合に設定。フロントエンドは開始日時が未来の場合「まだ開始していません」と表示する。
    - **1ウォレットあたりの上限枚数**: 買い占め防止用。
-3. 設定を保存すると、フロントエンドの`useReadContract(getActiveClaimCondition, ...)`が即座にこの内容を反映する。
+設定を保存すると、フロントエンドの`useReadContract(getActiveClaimCondition, ...)`が即座にこの内容を反映する。
 
 ---
 
