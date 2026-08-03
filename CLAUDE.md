@@ -78,6 +78,38 @@
 
 ---
 
+## 3.5 フロントエンドの実装済み機能（`app/page.tsx`）
+
+複数のNFTミントサイト構築ガイド記事を参考に、以下を実装・検証済み。追加のクオリティ改善が必要になった場合はこのリストと差分を取ること。
+
+- **複数NFT対応のギャラリー形式**: `getNFTs()`で全Lazy MintトークンIDを取得し、トークンIDごとに独立したミントカードを表示（`tokenId`ハードコード時代の制約を解消済み）。新しいNFTをDashboardで追加するだけでコード変更なしにギャラリーへ反映される。
+- **NFT画像プレビュー**: `MediaRenderer`使用。本番環境で自動MIMEタイプ検出が失敗し画像が表示されない不具合があったため、`guessImageMimeType()`でファイル拡張子から明示的に`mimeType`を渡している（原因調査の詳細はgit historyのコミットメッセージ参照）。
+- **進捗バー・Sold Out状態**: Claimed/Supplyを視覚的に表示し、供給上限に達すると自動で「Sold Out」ボタンに切替。
+- **数量入力の安全な上限**: 残り供給数・`quantityLimitPerWallet`・固定上限5のうち最小値に自動制限。
+- **クレーム開始前の状態表示**: `claimCondition.startTimestamp`が未来の場合「まだ開始していません」ボタンに切替。
+- **ミント成功後のトランザクションリンク**: `onTransactionConfirmed`のreceiptから`transactionHash`を取得しSnowtraceへリンク。
+- **コントラクトアドレスのコピーボタン**: `navigator.clipboard.writeText`使用、失敗時は静かにフォールバック（自動化ブラウザ環境では権限拒否でエラーになることを確認済み、実ブラウザでは問題ない）。
+- **ロード中のスケルイトン表示**: Price/Claimedのロード中はシマーアニメーション付きスケルトンに変更（`isLoadingCondition`分岐）。
+- **インライン通知**: `alert()`ではなくカード内のステータスバナーで成功/失敗を表示。
+
+未実装のまま検討候補として残っているもの（優先度は低い、必要になれば着手）:
+- 保有NFT一覧（My NFTs）表示
+- チェーン不一致（ウォレットが違うネットワークに接続）の警告
+- SNSシェアボタン
+- FAQ / How to mintセクション
+
+---
+
+## 3.6 ハマりどころ（次回同じ罠を踏まないための記録）
+
+- **Node.jsの自動アップグレードでグローバルnpmパッケージが消える**: Homebrewの`node`が26.5.0→26.5.1のように自動更新されると、`npm i -g`でインストールした`vercel`等のCLIが「command not found」になる（Cellarのパスが変わるため）。`npm i -g vercel`で再インストールするか、`/opt/homebrew/Cellar/node/<version>/bin/vercel`のようにフルパスで叩く。
+- **`.env.local`はEdit/Writeツールで直接編集できない**（セキュリティフックでブロックされる）。`vercel env add <name> <environment>`→`vercel env pull .env.local`の順で間接的に同期する。
+- **ホームディレクトリの無関係な`package-lock.json`がNext.jsのworkspace root検出を狂わせる**ことがある。`next.config.mjs`の`outputFileTracingRoot`で明示的にプロジェクトルートを固定すると回避できる。
+- **thirdweb Dashboardのブラウザセッションは短時間で切れる**（実測で1日程度）。再開時は再ログインが必要。ログインはGoogle/Email等のOAuthで、パスワード入力はAIが代行してはいけない領域なのでユーザー本人に依頼すること。
+- **テストネットfaucetの多くは新規ウォレットでは使えない**: Core WalletやQuickNodeの公式faucetは「メインネット残高がゼロより大きいこと」や「reCAPTCHA」を要求する。thirdweb Dashboard内蔵のfaucet（プロジェクトのOverviewページ）が最も簡単だが24時間に1回のクールダウンがある。
+
+---
+
 ## 5. ディレクトリ構成
 
 ```
