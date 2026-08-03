@@ -63,8 +63,40 @@
 - ✅ `app/page.tsx`の実コードバグ（`nftDropContract!`の非null断定）がprerenderをクラッシュさせていたのを、コンポーネント分割で解消。
 - ✅ **コントラクトを実際にAvalanche Fuji上へデプロイ済み**: アドレス `0x1D7C388c8cee7A2315EEe5670203574bb393B17e`（`contractType()`実行でDropERC1155と確認済み）。テスト画像（Cliffordストレンジアトラクタの生成アート）をLazy Mint、Price 0 AVAX / Supply 1000でClaim Conditions設定済み。
 - ✅ GitHubへpush済み、Vercel本番デプロイ済み、環境変数（Client ID・コントラクトアドレス）設定済み。サイトが実際に価格・Claimed数・NFT画像プレビューを正しく表示することをブラウザで確認済み。
-- ❌ **実際のウォレットでのmintトランザクション実行・提出用スクリーンショット撮影は未実施**（README section 8）。秘密鍵の署名が必要なためAIは代行できない。次回作業時はここから再開する。
+- ❌ **実際のウォレットでのmintトランザクション実行・提出用スクリーンショット撮影は未実施**（README section 8）。秘密鍵の署名が必要なためAIは代行できない。詳細な現状とブロッカーは下記「3.7」を参照し、次回作業時はここから再開する。
 - ❌ `next lint` は未検証。
+
+---
+
+## 3.7 【最優先・次回ここから再開】mint実行がガス代不足でブロック中（2026年7月26日時点）
+
+**現状**: サイト（`avalanche-fuji-nft-drop-studio.vercel.app`）でウォレット接続は成功済み（Google/email埋め込みウォレット）。接続されたウォレットアドレスは:
+
+```
+0xeDbFD4257C03af80A6Ea524724641f0851dBdC7d
+```
+
+このアドレスの残高は **0 AVAX**（Snowtraceで確認済み、トランザクション履歴もゼロ）。price自体は0 AVAXだが、claimトランザクションのガス代（0.00001 AVAX以上）が払えず、「Insufficient funds」モーダルが出てmintが実行できない。
+
+**重要な発見**: このサイトの埋め込みウォレット（`NEXT_PUBLIC_TEMPLATE_CLIENT_ID`＝このプロジェクトのclientId、`1f5c8d9b1c77c33f778903bd7c8c0ff3`スコープ）と、thirdweb Dashboard（`thirdweb.com`）にログインした際の埋め込みウォレット（`0x86993bCe97c2B5A98BD30FD3562884CCDF13f3ba`、コントラクトのAdminウォレット）は、**同じGoogleアカウントでログインしても別アドレスになる**。理由: thirdwebの埋め込みウォレットはclientIdごとにスコープされるため、`thirdweb.com`自身のclientIdと自分のプロジェクトのclientIdでは別ウォレットが生成される。これを知らずにthirdweb.com側のfaucetを叩いても、サイト側のウォレットには一切届かない（このミスで往復に時間を溶かした実績あり、次回は繰り返さないこと）。
+
+**今回試して失敗した資金調達方法**（すべて実機で試行済み、再試行しても同じ結果になる可能性が高い）:
+
+1. サイトの「Insufficient funds」モーダル内「Get testnet funds」リンク → `thirdweb.com/avalanche-fuji`に遷移するが、そこでGoogleログインすると**別のclientIdスコープの別ウォレット**（`0x8699...f3ba`）に接続されてしまい、サイト側の`0xeDbFD425...`には届かない。
+2. thirdweb Dashboardの蛇口（Overviewページ / avalanche-fujiチェーンページ）→ `0x8699...f3ba`宛には成功したが、**同じ蛇口を1日1回しか使えない**（既に本日使用済みでクールダウン中）。
+3. Core Wallet公式faucet（`https://core.app/tools/testnet-faucet/`）→ フルアドレス`0xeDbFD4257C03af80A6Ea524724641f0851dBdC7d`を直接入力する形なら正しいウォレットに送れるが、**クーポンコードかメインネット残高が必須**で、ユーザーは両方とも持っていない。
+4. `0x8699...f3ba`（約0.01 AVAX保有）から`0xeDbFD425...`へ直接送金 → thirdwebウォレットUIの「Send Funds」画面のネットワーク選択リストに**Avalanche Fujiが表示されない**（検索窓に"Fuji"「43113」どちらを入れてもヒットしない）。原因未特定。UIの別の場所（例えばembedded walletのフルダッシュボードUIや`wallet.thirdweb.com`等）にAvalanche Fujiを追加する方法があるかもしれないが未調査。
+
+**次回試すべきこと（優先順）**:
+
+1. **thirdweb Dashboardの蛇口の24時間クールダウンが明けているか確認**し、明けていたら`0x8699...f3ba`にもう一度0.01 AVAXを入れてから、案3のCore Walletサイトで得たフルアドレス貼り付け送金ではなく、**案4のSend機能でもう一度Avalanche Fujiを探す**（ネットワークリストの「カスタムネットワークを追加する」からChain ID 43113 / RPC `https://43113.rpc.thirdweb.com`を手動追加できる可能性がある。前回はこれを試していない）。
+2. それでも失敗する場合は、ユーザーにCore Wallet等のクーポンコード入手（Discord経由のguild.xyz等、過去に試して手間取った）を再度依頼するか、単純に**24時間待ってサイト自身のウォレットで直接faucetを再試行**する（サイトのウォレット`0xeDbFD425...`はまだ一度もfaucet請求に成功していないので、正しいフローさえ踏めれば単純に24時間待つ必要すらない可能性がある——だがそのフローが「別ウォレットに繋がる」問題があるため、まずは前述の別経路を優先すること）。
+3. 資金調達ができたら、サイトで「Mint（Claim）する」を押し、ウォレットの署名を確認後、以下のスクリーンショットを撮影してREADME section 8に貼り付ける:
+   - サイトのトップ画面（ウォレット未接続時）
+   - ウォレット接続後、Price/Claimedが表示されている画面
+   - ウォレットの署名確認ダイアログ
+   - mint成功画面（トランザクションリンク表示、`onTransactionConfirmed`のUIが動作することを確認）
+   - Snowtrace (testnet) でNFTが確認できる画面
 
 ---
 
@@ -72,9 +104,10 @@
 
 以下は完了済み: thirdweb Client ID発行・コントラクトデプロイ・Lazy Mint・Claim Conditions設定・`.env.local`/Vercel環境変数設定・GitHubへのpush・Vercelへのデプロイ。
 
-残っているのは秘密鍵の署名が必要な最後の1点のみ:
+残っているのは秘密鍵の署名が必要な最後の1点のみ（詳細は上記「3.7」参照）:
 
-1. 実際に自分のウォレット（MetaMask等）でサイトからmintし、MetaMaskの署名ダイアログ・mint成功画面・Snowtrace (testnet)上でのNFT確認画面のスクリーンショットを撮影する（README section 8のチェックリスト）
+1. ガス代（AVAX）をサイトのウォレット（`0xeDbFD4257C03af80A6Ea524724641f0851dBdC7d`）に入手する
+2. 実際に自分のウォレットでサイトからmintし、署名ダイアログ・mint成功画面・Snowtrace (testnet)上でのNFT確認画面のスクリーンショットを撮影する（README section 8のチェックリスト）
 
 ---
 
