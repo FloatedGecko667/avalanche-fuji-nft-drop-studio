@@ -91,6 +91,7 @@ function GalleryWithContract({
     count: 20,
   });
   const [addressCopied, setAddressCopied] = useState(false);
+  const [activeTab, setActiveTab] = useState<"mint" | "myNfts">("mint");
 
   const copyContractAddress = async () => {
     try {
@@ -122,32 +123,53 @@ function GalleryWithContract({
 
       <ChainMismatchBanner />
 
-      <MyNfts client={client} contract={contract} />
-
-      {isLoading && (
-        <div className="card">
-          <span className="skeleton skeleton-text" />
-        </div>
-      )}
-
-      {!isLoading && (!nfts || nfts.length === 0) && (
-        <div className="card">
-          <p className="muted">
-            まだLazy MintされたNFTがありません。thirdweb DashboardでNFTを追加してください。
-          </p>
-        </div>
-      )}
-
-      <div className="gallery-grid">
-        {nfts?.map((nft) => (
-          <NftMintCard
-            key={nft.id.toString()}
-            client={client}
-            contract={contract}
-            nft={nft}
-          />
-        ))}
+      <div className="tabs">
+        <button
+          type="button"
+          className={`tab-btn${activeTab === "mint" ? " active" : ""}`}
+          onClick={() => setActiveTab("mint")}
+        >
+          Mint
+        </button>
+        <button
+          type="button"
+          className={`tab-btn${activeTab === "myNfts" ? " active" : ""}`}
+          onClick={() => setActiveTab("myNfts")}
+        >
+          My NFTs
+        </button>
       </div>
+
+      {activeTab === "mint" && (
+        <>
+          {isLoading && (
+            <div className="card">
+              <span className="skeleton skeleton-text" />
+            </div>
+          )}
+
+          {!isLoading && (!nfts || nfts.length === 0) && (
+            <div className="card">
+              <p className="muted">
+                まだLazy MintされたNFTがありません。thirdweb DashboardでNFTを追加してください。
+              </p>
+            </div>
+          )}
+
+          <div className="gallery-grid">
+            {nfts?.map((nft) => (
+              <NftMintCard
+                key={nft.id.toString()}
+                client={client}
+                contract={contract}
+                nft={nft}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {activeTab === "myNfts" && <MyNfts client={client} contract={contract} />}
 
       <FaqSection />
 
@@ -235,12 +257,18 @@ function MyNfts({
   });
 
   if (!account) {
-    return null;
+    return (
+      <div className="card">
+        <p className="muted">
+          保有NFTを確認するには、先にウォレットを接続してください。
+        </p>
+      </div>
+    );
   }
 
   if (isLoading) {
     return (
-      <div className="card" style={{ marginTop: 24 }}>
+      <div className="card">
         <span className="skeleton skeleton-text" />
       </div>
     );
@@ -249,36 +277,39 @@ function MyNfts({
   const owned = ownedNfts?.filter((nft) => nft.quantityOwned > 0n) ?? [];
 
   if (owned.length === 0) {
-    return null;
+    return (
+      <div className="card">
+        <p className="muted">
+          このウォレットはまだこのコントラクトのNFTを保有していません。
+        </p>
+      </div>
+    );
   }
 
   return (
-    <div className="card" style={{ marginTop: 24 }}>
-      <h2 style={{ marginTop: 0 }}>保有NFT（My NFTs）</h2>
-      <div className="gallery-grid">
-        {owned.map((nft) => (
-          <div key={nft.id.toString()} className="card">
-            {nft.metadata.image && (
-              <div className="media-frame">
-                <MediaRenderer
-                  client={client}
-                  src={nft.metadata.image}
-                  alt={nft.metadata.name ?? "NFT preview"}
-                  width="100%"
-                  height="auto"
-                  mimeType={guessImageMimeType(nft.metadata.image)}
-                />
-              </div>
-            )}
-            <h3 style={{ margin: "12px 0 4px" }}>
-              {nft.metadata.name ?? `Token #${nft.id.toString()}`}
-            </h3>
-            <p className="muted" style={{ margin: 0 }}>
-              保有数: {nft.quantityOwned.toString()}
-            </p>
-          </div>
-        ))}
-      </div>
+    <div className="gallery-grid">
+      {owned.map((nft) => (
+        <div key={nft.id.toString()} className="card">
+          {nft.metadata.image && (
+            <div className="media-frame">
+              <MediaRenderer
+                client={client}
+                src={nft.metadata.image}
+                alt={nft.metadata.name ?? "NFT preview"}
+                width="100%"
+                height="auto"
+                mimeType={guessImageMimeType(nft.metadata.image)}
+              />
+            </div>
+          )}
+          <h3 style={{ margin: "12px 0 4px" }}>
+            {nft.metadata.name ?? `Token #${nft.id.toString()}`}
+          </h3>
+          <p className="muted" style={{ margin: 0 }}>
+            保有数: {nft.quantityOwned.toString()}
+          </p>
+        </div>
+      ))}
     </div>
   );
 }
@@ -303,7 +334,7 @@ function FaqSection() {
     {
       question: "mint後、NFTはどこで確認できますか？",
       answer:
-        "mint成功後に表示されるトランザクションリンクからSnowtrace（testnet）で確認できるほか、このページの「保有NFT（My NFTs）」セクションにも表示されます。",
+        "mint成功後に表示されるトランザクションリンクからSnowtrace（testnet）で確認できるほか、「My NFTs」タブにも表示されます。",
     },
   ];
 
