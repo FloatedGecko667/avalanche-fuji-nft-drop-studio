@@ -144,36 +144,42 @@ function GalleryWithContract({
         </button>
       </div>
 
-      {activeTab === "mint" && (
-        <>
-          {isLoading && (
-            <div className="card">
-              <span className="skeleton skeleton-text" />
-            </div>
-          )}
-
-          {!isLoading && (!nfts || nfts.length === 0) && (
-            <div className="card">
-              <p className="muted">
-                まだLazy MintされたNFTがありません。thirdweb DashboardでNFTを追加してください。
-              </p>
-            </div>
-          )}
-
-          <div className="gallery-grid">
-            {nfts?.map((nft) => (
-              <NftMintCard
-                key={nft.id.toString()}
-                client={client}
-                contract={contract}
-                nft={nft}
-              />
-            ))}
+      {/*
+        Both tab panels stay mounted at all times; only visibility toggles.
+        Conditionally mounting/unmounting them would tear down each panel's
+        useReadContract queries on every switch, forcing a refetch (and a
+        skeleton flash) each time the user comes back to a tab.
+      */}
+      <div hidden={activeTab !== "mint"}>
+        {isLoading && (
+          <div className="card">
+            <span className="skeleton skeleton-text" />
           </div>
-        </>
-      )}
+        )}
 
-      {activeTab === "myNfts" && <MyNfts client={client} contract={contract} />}
+        {!isLoading && (!nfts || nfts.length === 0) && (
+          <div className="card">
+            <p className="muted">
+              まだLazy MintされたNFTがありません。thirdweb DashboardでNFTを追加してください。
+            </p>
+          </div>
+        )}
+
+        <div className="gallery-grid">
+          {nfts?.map((nft) => (
+            <NftMintCard
+              key={nft.id.toString()}
+              client={client}
+              contract={contract}
+              nft={nft}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div hidden={activeTab !== "myNfts"}>
+        <MyNfts client={client} contract={contract} />
+      </div>
 
       <FaqSection />
 
