@@ -54,6 +54,10 @@ function shortenTxHash(hash: string) {
   return `${hash.slice(0, 10)}...${hash.slice(-6)}`;
 }
 
+function snowtraceNftUrl(contractAddress: string, tokenId: bigint) {
+  return `https://testnet.snowtrace.io/nft/${contractAddress}/${tokenId.toString()}`;
+}
+
 // Guesses a MediaRenderer-friendly mime type from a metadata image's file
 // extension. NFTs uploaded through the thirdweb Dashboard rarely set an
 // explicit mime type, and MediaRenderer's own auto-detection has been
@@ -305,6 +309,14 @@ function MyNfts({
           <h3 style={{ margin: "12px 0 4px" }}>
             {nft.metadata.name ?? `Token #${nft.id.toString()}`}
           </h3>
+          <a
+            className="token-link"
+            href={snowtraceNftUrl(contract.address, nft.id)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Snowtraceで見る ↗
+          </a>
           <p className="muted" style={{ margin: 0 }}>
             保有数: {nft.quantityOwned.toString()}
           </p>
@@ -415,6 +427,14 @@ function NftMintCard({
       <h2 style={{ margin: "16px 0 4px" }}>
         {nft.metadata.name ?? `Token #${tokenId.toString()}`}
       </h2>
+      <a
+        className="token-link"
+        href={snowtraceNftUrl(contract.address, tokenId)}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Snowtraceで見る ↗
+      </a>
       {nft.metadata.description && (
         <p className="muted">{nft.metadata.description}</p>
       )}

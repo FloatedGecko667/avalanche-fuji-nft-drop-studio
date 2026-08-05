@@ -175,6 +175,18 @@ button.mint-btn:disabled {
   margin: -4px 0 12px;
 }
 
+.token-link {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  margin-bottom: 8px;
+}
+
+.token-link:hover {
+  text-decoration: underline;
+}
+
 .tabs {
   display: flex;
   gap: 4px;
