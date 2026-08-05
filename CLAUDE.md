@@ -63,51 +63,54 @@
 - ✅ `app/page.tsx`の実コードバグ（`nftDropContract!`の非null断定）がprerenderをクラッシュさせていたのを、コンポーネント分割で解消。
 - ✅ **コントラクトを実際にAvalanche Fuji上へデプロイ済み**: アドレス `0x1D7C388c8cee7A2315EEe5670203574bb393B17e`（`contractType()`実行でDropERC1155と確認済み）。テスト画像（Cliffordストレンジアトラクタの生成アート）をLazy Mint、Price 0 AVAX / Supply 1000でClaim Conditions設定済み。
 - ✅ GitHubへpush済み、Vercel本番デプロイ済み、環境変数（Client ID・コントラクトアドレス）設定済み。サイトが実際に価格・Claimed数・NFT画像プレビューを正しく表示することをブラウザで確認済み。
-- ❌ **実際のウォレットでのmintトランザクション実行・提出用スクリーンショット撮影は未実施**（README section 8）。秘密鍵の署名が必要なためAIは代行できない。詳細な現状とブロッカーは下記「3.7」を参照し、次回作業時はここから再開する。
+- ✅ **実際のウォレットでのmintトランザクション実行が完了**（2026年8月5日）。詳細は下記「3.7」参照。
 - ❌ `next lint` は未検証。
+- ❌ README section 8への最終スクリーンショット貼り付けは未実施（撮影済みの画面をREADMEに反映する作業が残っている）。
 
 ---
 
-## 3.7 【最優先・次回ここから再開】mint実行がガス代不足でブロック中（2026年7月26日時点）
+## 3.7 mintトランザクション実行 完了記録（2026年8月5日）
 
-**現状**: サイト（`avalanche-fuji-nft-drop-studio.vercel.app`）でウォレット接続は成功済み（Google/email埋め込みウォレット）。接続されたウォレットアドレスは:
+前回セッションでガス代不足によりブロックされていた問題は解消し、実際のmintに成功した。**次回同種の課題を再現する場合のために、成功した経路をそのまま記録する。**
 
-```
-0xeDbFD4257C03af80A6Ea524724641f0851dBdC7d
-```
+**資金調達に成功した経路**（前回失敗した4案とは別の組み合わせ）:
 
-このアドレスの残高は **0 AVAX**（Snowtraceで確認済み、トランザクション履歴もゼロ）。price自体は0 AVAXだが、claimトランザクションのガス代（0.00001 AVAX以上）が払えず、「Insufficient funds」モーダルが出てmintが実行できない。
+1. thirdweb Dashboard（`thirdweb.com/avalanche-fuji`）のfaucetで24時間クールダウン明けを確認し、「Get 0.01 AVAX」を実行 → `thirdweb.com`自身のclientIdスコープの埋め込みウォレット `0x86993bCe97c2B5A98BD30FD3562884CCDF13f3ba` に0.01 AVAX着金。
+2. `0x8699...f3ba`のウォレットUIから「Send Funds」でAvalanche Fujiを再度探索したところ、今回はToken選択欄に「Avalanche」（Testnet/Fuji）が表示され、**カスタムネットワーク手動追加は不要だった**（前回「見つからない」としていたのは初回にネットワーク一覧のキャッシュ未更新か操作ミスだった可能性が高い。次回詰まったら再読み込みや別画面からのやり直しをまず試すこと）。
+3. 送金時、送金先アドレスを一度目は不正な形式でエラー（`Invalid receiver address`。コピペ時の文字欠けが原因の可能性）→ アドレスを`0xeDbFD4257C03af80A6Ea524724641f0851dBdC7d`と手動で正確に再入力して解消。
+4. 二度目、保有全額の0.01 AVAXを送金しようとして`Insufficient Funds`エラー（送金トランザクション自体のガス代が残らないため）→ **送金額を0.008 AVAXに減らす**（0.002 AVAXをガス代用に残す）ことで送金成功。
+5. サイトのウォレット`0xeDbFD4257C03af80A6Ea524724641f0851dBdC7d`に0.008 AVAX着金をSnowtraceで確認後、サイトで「Mint（Claim）する」を実行 → 成功。
 
-**重要な発見**: このサイトの埋め込みウォレット（`NEXT_PUBLIC_TEMPLATE_CLIENT_ID`＝このプロジェクトのclientId、`1f5c8d9b1c77c33f778903bd7c8c0ff3`スコープ）と、thirdweb Dashboard（`thirdweb.com`）にログインした際の埋め込みウォレット（`0x86993bCe97c2B5A98BD30FD3562884CCDF13f3ba`、コントラクトのAdminウォレット）は、**同じGoogleアカウントでログインしても別アドレスになる**。理由: thirdwebの埋め込みウォレットはclientIdごとにスコープされるため、`thirdweb.com`自身のclientIdと自分のプロジェクトのclientIdでは別ウォレットが生成される。これを知らずにthirdweb.com側のfaucetを叩いても、サイト側のウォレットには一切届かない（このミスで往復に時間を溶かした実績あり、次回は繰り返さないこと）。
+**得られた教訓（次回このパターンに詰まったら参照）**:
+- thirdweb系ウォレットUIで他ウォレットへ送金する際は、**保有額ちょうどではなく、ガス代分（0.001〜0.002 AVAX程度）を差し引いた額を指定する**こと。
+- 送金先アドレスのコピペは失敗することがある。エラーが出たら再入力で解消することが多い。
+- Fujiがネットワーク選択に出ないという前回の観測は再現しなかった。次回同じ問題に当たったら、まず画面の再読み込み・別のエントリーポイント（ウォレット詳細ページ直接アクセス等）を試してから、カスタムネットワーク追加に進む。
 
-**今回試して失敗した資金調達方法**（すべて実機で試行済み、再試行しても同じ結果になる可能性が高い）:
+**実際に成功したmintトランザクション**:
+- Transaction Hash: `0x5ebe702b1a964c67818fbd49949ba4e43dd58bf8175c280fc13e1f0163591e57`
+- Method: `Claim`、Status: `Success`
+- From: `0xeDbFD4257C03af80A6Ea524724641f0851dBdC7d`
+- Token: ERC-1155 Token ID `0`、コントラクト `0x1D7C388c8cee7A2315EEe5670203574bb393B17e` から1個受領
+- Value: `0 AVAX`（price通り無料）、Gas: `0.00002713 AVAX`
+- Claimed数: `0/1000` → `1/1000`
 
-1. サイトの「Insufficient funds」モーダル内「Get testnet funds」リンク → `thirdweb.com/avalanche-fuji`に遷移するが、そこでGoogleログインすると**別のclientIdスコープの別ウォレット**（`0x8699...f3ba`）に接続されてしまい、サイト側の`0xeDbFD425...`には届かない。
-2. thirdweb Dashboardの蛇口（Overviewページ / avalanche-fujiチェーンページ）→ `0x8699...f3ba`宛には成功したが、**同じ蛇口を1日1回しか使えない**（既に本日使用済みでクールダウン中）。
-3. Core Wallet公式faucet（`https://core.app/tools/testnet-faucet/`）→ フルアドレス`0xeDbFD4257C03af80A6Ea524724641f0851dBdC7d`を直接入力する形なら正しいウォレットに送れるが、**クーポンコードかメインネット残高が必須**で、ユーザーは両方とも持っていない。
-4. `0x8699...f3ba`（約0.01 AVAX保有）から`0xeDbFD425...`へ直接送金 → thirdwebウォレットUIの「Send Funds」画面のネットワーク選択リストに**Avalanche Fujiが表示されない**（検索窓に"Fuji"「43113」どちらを入れてもヒットしない）。原因未特定。UIの別の場所（例えばembedded walletのフルダッシュボードUIや`wallet.thirdweb.com`等）にAvalanche Fujiを追加する方法があるかもしれないが未調査。
-
-**次回試すべきこと（優先順）**:
-
-1. **thirdweb Dashboardの蛇口の24時間クールダウンが明けているか確認**し、明けていたら`0x8699...f3ba`にもう一度0.01 AVAXを入れてから、案3のCore Walletサイトで得たフルアドレス貼り付け送金ではなく、**案4のSend機能でもう一度Avalanche Fujiを探す**（ネットワークリストの「カスタムネットワークを追加する」からChain ID 43113 / RPC `https://43113.rpc.thirdweb.com`を手動追加できる可能性がある。前回はこれを試していない）。
-2. それでも失敗する場合は、ユーザーにCore Wallet等のクーポンコード入手（Discord経由のguild.xyz等、過去に試して手間取った）を再度依頼するか、単純に**24時間待ってサイト自身のウォレットで直接faucetを再試行**する（サイトのウォレット`0xeDbFD425...`はまだ一度もfaucet請求に成功していないので、正しいフローさえ踏めれば単純に24時間待つ必要すらない可能性がある——だがそのフローが「別ウォレットに繋がる」問題があるため、まずは前述の別経路を優先すること）。
-3. 資金調達ができたら、サイトで「Mint（Claim）する」を押し、ウォレットの署名を確認後、以下のスクリーンショットを撮影してREADME section 8に貼り付ける:
-   - サイトのトップ画面（ウォレット未接続時）
-   - ウォレット接続後、Price/Claimedが表示されている画面
-   - ウォレットの署名確認ダイアログ
-   - mint成功画面（トランザクションリンク表示、`onTransactionConfirmed`のUIが動作することを確認）
-   - Snowtrace (testnet) でNFTが確認できる画面
+**撮影済みスクリーンショット**（README section 8用、ローカルに未保存の場合は再度同じ操作で撮り直し可能）:
+- ✅ ウォレット接続後、Price/Claimedが表示されている画面
+- ✅ mint成功画面（トランザクションリンク表示、`onTransactionConfirmed`のUIが動作することを実機確認）
+- ✅ Snowtraceでのトランザクション詳細画面（ERC-1155 Tokens Transferredが表示されmintを裏付け）
+- ❌ サイトのトップ画面（ウォレット未接続時） — 未撮影の場合は次回撮ること
+- ❌ ウォレットの署名確認ダイアログ — embedded walletはパスキー/自動署名フローのため、明示的な署名ダイアログ画面がなかった可能性がある。次回mintする際（Quantityを増やして再Claim等）に、署名関連のUIが出るタイミングがあれば撮影すること。
 
 ---
 
 ## 4. 自分（AI）ではできない残作業（ユーザー本人がやる必要がある）
 
-以下は完了済み: thirdweb Client ID発行・コントラクトデプロイ・Lazy Mint・Claim Conditions設定・`.env.local`/Vercel環境変数設定・GitHubへのpush・Vercelへのデプロイ。
+以下は完了済み: thirdweb Client ID発行・コントラクトデプロイ・Lazy Mint・Claim Conditions設定・`.env.local`/Vercel環境変数設定・GitHubへのpush・Vercelへのデプロイ・ガス代調達・実際のmintトランザクション実行（詳細は上記「3.7」）。
 
-残っているのは秘密鍵の署名が必要な最後の1点のみ（詳細は上記「3.7」参照）:
+残っているのは:
 
-1. ガス代（AVAX）をサイトのウォレット（`0xeDbFD4257C03af80A6Ea524724641f0851dBdC7d`）に入手する
-2. 実際に自分のウォレットでサイトからmintし、署名ダイアログ・mint成功画面・Snowtrace (testnet)上でのNFT確認画面のスクリーンショットを撮影する（README section 8のチェックリスト）
+1. README section 8に、撮影済み screenshot を実際に貼り付ける（トップ画面・署名ダイアログ相当の画面が未撮影なら追加撮影も）
+2. `next lint` の実行・確認
 
 ---
 
@@ -125,11 +128,13 @@
 - **ロード中のスケルイトン表示**: Price/Claimedのロード中はシマーアニメーション付きスケルトンに変更（`isLoadingCondition`分岐）。
 - **インライン通知**: `alert()`ではなくカード内のステータスバナーで成功/失敗を表示。
 
+- **複数チェーン対応のウォレット接続**: `ConnectButton`に`chains`（`lib/client.ts`の`supportedWalletChains`: Ethereum/Polygon/Arbitrum/Optimism/Base/BSC/Avalanche/Avalanche Fuji）を渡し、他ネットワーク上のウォレットでも接続できるようにした。mint自体は常にAvalanche Fuji（`chain`）を対象にする。
+- **チェーン不一致警告バナー**: `useActiveWalletChain`で現在の接続chainを取得し、Avalanche Fuji以外なら警告バナーと「切り替える」ボタン（`useSwitchActiveWalletChain`）を表示。
+- **保有NFT一覧（My NFTs）**: `getOwnedNFTs`（`thirdweb/extensions/erc1155`）で接続ウォレットの保有NFTを一覧表示。**`useIndexer: false`を明示的に指定している**（重要: デフォルトの`useIndexer: true`はthirdweb Insightインデクサーを使うが、Avalanche Fujiや直後にmintしたばかりのトークンはインデックスが反映されておらず空配列が返ってくることを実機で確認したため、オンチェーンRPC直読みに固定した）。
+- **FAQ / How to mintセクション**: 静的な4項目（必要なもの・faucet入手先・mint手順・mint後の確認方法）。
+
 未実装のまま検討候補として残っているもの（優先度は低い、必要になれば着手）:
-- 保有NFT一覧（My NFTs）表示
-- チェーン不一致（ウォレットが違うネットワークに接続）の警告
 - SNSシェアボタン
-- FAQ / How to mintセクション
 
 ---
 

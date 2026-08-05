@@ -5,17 +5,20 @@ import {
   ConnectButton,
   MediaRenderer,
   useActiveAccount,
+  useActiveWalletChain,
   useReadContract,
+  useSwitchActiveWalletChain,
 } from "thirdweb/react";
 import { ClaimButton } from "thirdweb/react";
 import {
   getActiveClaimCondition,
   getNFTs,
+  getOwnedNFTs,
   totalSupply,
 } from "thirdweb/extensions/erc1155";
 import { toEther, type ThirdwebClient, type NFT } from "thirdweb";
 import { Providers } from "./providers";
-import { client, chain, nftDropContract } from "@/lib/client";
+import { client, chain, nftDropContract, supportedWalletChains } from "@/lib/client";
 
 function Gallery() {
   if (!client) {
@@ -104,7 +107,11 @@ function GalleryWithContract({
     <>
       <div className="row">
         <span className="badge">Avalanche Fuji</span>
-        <ConnectButton client={client} chain={chain} />
+        <ConnectButton
+          client={client}
+          chain={chain}
+          chains={supportedWalletChains}
+        />
       </div>
 
       <h1 className="page-title">Avalanche Fuji NFT Drop Studio</h1>
@@ -112,6 +119,10 @@ function GalleryWithContract({
         オリジナルのデジタルコンテンツを数量限定・条件付きで配布するNFT
         Dropです（thirdweb / DropERC1155 Lazy Mint / Avalanche Fuji）。
       </p>
+
+      <ChainMismatchBanner />
+
+      <MyNfts client={client} contract={contract} />
 
       {isLoading && (
         <div className="card">
@@ -138,6 +149,8 @@ function GalleryWithContract({
         ))}
       </div>
 
+      <FaqSection />
+
       <div className="contract-link">
         <span className="muted">Contract: </span>
         <a
@@ -157,6 +170,155 @@ function GalleryWithContract({
         </button>
       </div>
     </>
+  );
+}
+
+function ChainMismatchBanner() {
+  const account = useActiveAccount();
+  const activeChain = useActiveWalletChain();
+  const switchChain = useSwitchActiveWalletChain();
+  const [switching, setSwitching] = useState(false);
+
+  if (!account || !activeChain || activeChain.id === chain.id) {
+    return null;
+  }
+
+  const handleSwitch = async () => {
+    setSwitching(true);
+    try {
+      await switchChain(chain);
+    } catch {
+      // The wallet may reject or cancel the switch prompt; the banner
+      // simply stays visible so the user can retry.
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  return (
+    <div className="status-banner status-error">
+      <p style={{ margin: 0 }}>
+        現在ウォレットは Avalanche Fuji 以外のネットワーク（chain id{" "}
+        {activeChain.id}）に接続されています。mintするには Avalanche Fuji
+        に切り替えてください。
+      </p>
+      <button
+        type="button"
+        className="copy-btn"
+        onClick={handleSwitch}
+        disabled={switching}
+      >
+        {switching ? "切り替え中..." : "Avalanche Fuji に切り替える"}
+      </button>
+    </div>
+  );
+}
+
+function MyNfts({
+  client,
+  contract,
+}: {
+  client: ThirdwebClient;
+  contract: NonNullable<typeof nftDropContract>;
+}) {
+  const account = useActiveAccount();
+  const { data: ownedNfts, isLoading } = useReadContract(getOwnedNFTs, {
+    contract,
+    address: account?.address ?? "",
+    start: 0,
+    count: 20,
+    // Avalanche Fuji is not reliably covered by thirdweb's Insight indexer,
+    // and freshly minted tokens can lag behind it. Read directly from the
+    // chain instead so ownership reflects the latest on-chain state.
+    useIndexer: false,
+    queryOptions: { enabled: !!account },
+  });
+
+  if (!account) {
+    return null;
+  }
+
+  if (isLoading) {
+    return (
+      <div className="card" style={{ marginTop: 24 }}>
+        <span className="skeleton skeleton-text" />
+      </div>
+    );
+  }
+
+  const owned = ownedNfts?.filter((nft) => nft.quantityOwned > 0n) ?? [];
+
+  if (owned.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 24 }}>
+      <h2 style={{ marginTop: 0 }}>保有NFT（My NFTs）</h2>
+      <div className="gallery-grid">
+        {owned.map((nft) => (
+          <div key={nft.id.toString()} className="card">
+            {nft.metadata.image && (
+              <div className="media-frame">
+                <MediaRenderer
+                  client={client}
+                  src={nft.metadata.image}
+                  alt={nft.metadata.name ?? "NFT preview"}
+                  width="100%"
+                  height="auto"
+                  mimeType={guessImageMimeType(nft.metadata.image)}
+                />
+              </div>
+            )}
+            <h3 style={{ margin: "12px 0 4px" }}>
+              {nft.metadata.name ?? `Token #${nft.id.toString()}`}
+            </h3>
+            <p className="muted" style={{ margin: 0 }}>
+              保有数: {nft.quantityOwned.toString()}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FaqSection() {
+  const faqs = [
+    {
+      question: "mintするには何が必要ですか？",
+      answer:
+        "Avalanche FujiテストネットのAVAXを少量（ガス代分）保有したウォレットが必要です。thirdwebのメール/Googleログインでも自動的に埋め込みウォレットが作成されます。",
+    },
+    {
+      question: "テストネットAVAXはどこで入手できますか？",
+      answer:
+        "thirdweb公式faucet（thirdweb.com/avalanche-fuji）やAvalanche公式Core faucetから無料で取得できます。1日あたりの取得量に上限があります。",
+    },
+    {
+      question: "mint手順は？",
+      answer:
+        "1. 右上の「Connect」からウォレットを接続する。2. ネットワークがAvalanche Fujiであることを確認する（違う場合は警告バナーの案内に従って切り替える）。3. 欲しいNFTのQuantityを指定し「Mint（Claim）する」を押す。4. ウォレット側の確認を承認するとmintが完了する。",
+    },
+    {
+      question: "mint後、NFTはどこで確認できますか？",
+      answer:
+        "mint成功後に表示されるトランザクションリンクからSnowtrace（testnet）で確認できるほか、このページの「保有NFT（My NFTs）」セクションにも表示されます。",
+    },
+  ];
+
+  return (
+    <div className="card" style={{ marginTop: 24 }}>
+      <h2 style={{ marginTop: 0 }}>FAQ / How to mint</h2>
+      {faqs.map((faq) => (
+        <div key={faq.question} style={{ marginTop: 16 }}>
+          <p style={{ margin: 0, fontWeight: 600 }}>{faq.question}</p>
+          <p className="muted" style={{ marginTop: 4 }}>
+            {faq.answer}
+          </p>
+        </div>
+      ))}
+    </div>
   );
 }
 

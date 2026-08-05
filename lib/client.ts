@@ -1,5 +1,14 @@
 import { createThirdwebClient, getContract } from "thirdweb";
-import { avalancheFuji } from "thirdweb/chains";
+import {
+  arbitrum,
+  avalanche,
+  avalancheFuji,
+  base,
+  bsc,
+  ethereum,
+  optimism,
+  polygon,
+} from "thirdweb/chains";
 
 // Client ID は公開可能な識別子。thirdweb Dashboard (Settings > API Keys) で発行する。
 // 秘密鍵やSecret Keyはフロントエンドコードに絶対に含めないこと。
@@ -18,7 +27,23 @@ export const client = clientId
   ? createThirdwebClient({ clientId })
   : null;
 
+// The NFT Drop contract is deployed only on Avalanche Fuji; every claim
+// transaction always targets this chain.
 export const chain = avalancheFuji;
+
+// Wallets already connected to one of these networks can still connect to
+// the app (ConnectButton lists them as connection options). Minting itself
+// still requires switching to `chain` above, which the mint UI prompts for.
+export const supportedWalletChains = [
+  avalancheFuji,
+  avalanche,
+  ethereum,
+  polygon,
+  arbitrum,
+  optimism,
+  base,
+  bsc,
+];
 
 const contractAddress = process.env.NEXT_PUBLIC_NFT_DROP_CONTRACT_ADDRESS;
 
