@@ -18,7 +18,9 @@ Web3フレームワーク [thirdweb](https://thirdweb.com/) を用いた、Avala
 
 - **数量限定**: Claim Conditionsの `maxClaimableSupply` で総発行数の上限を設定する。上限に達するとそれ以上claimできない。
 - **条件付き配布**: Claim Conditionsのallowlist機能を使い、特定のウォレットアドレスのみがclaimできるように制限できる。配布開始日時・終了日時、1ウォレットあたりの上限枚数も設定可能。
-- **コンテンツの一意性**: Lazy Mintで事前アップロードする画像・メタデータをそれぞれ異なる内容にしておくことで、claimされた順に異なるユニークコンテンツが割り当てられる。
+- **コンテンツ単位の管理**: Lazy MintでトークンIDごとに異なる画像・メタデータを登録する。ユーザーはギャラリーから欲しいトークンIDを選んでclaimし、同一トークンIDに対してはSupplyの範囲内で同じコンテンツが発行される（ERC-1155方式）。トークンIDごとに個別のClaim Conditionsを設定できるため、コンテンツ単位で配布条件を変えられる。
+
+> **補足**: `DropERC721`（ERC721A Drop）はclaimされた順に別々のトークンIDが自動で割り当てられる方式だが、本プロジェクトが実際にデプロイしたのは `DropERC1155` であり、**claim順にコンテンツが変わるわけではない**（ユーザーがトークンIDを選ぶ）。この違いは構成上の重要な差なので混同しないこと。
 
 ### 動作の流れ
 
@@ -40,34 +42,46 @@ Web3フレームワーク [thirdweb](https://thirdweb.com/) を用いた、Avala
 
 ```mermaid
 flowchart LR
-    subgraph User["ユーザー環境"]
-        Browser["ブラウザ"]
-        Wallet["MetaMask等\nウォレット拡張"]
+    subgraph Prep["① 事前準備（開発者が1回だけ実施）"]
+        direction LR
+        Dev["開発者<br/>ローカルPC / ブラウザ"]
+        Dashboard["thirdweb Dashboard<br/>Webコンソール"]
+        Dev -- "デプロイ / Lazy Mint /<br/>Claim Conditions設定" --> Dashboard
+        Dev -- "git push / vercel deploy" --> BuildVercel["Vercel<br/>ビルド・静的生成"]
     end
 
-    subgraph Vercel["Vercel（パブリッククラウド無料枠）"]
-        NextApp["Next.js App Router\n(avalanche-fuji-nft-drop-studio)\nthirdweb SDK v5"]
+    subgraph Runtime["② 実行時（ユーザーがサイトを開くたび）"]
+        direction LR
+        Browser["ユーザーのブラウザ<br/>Next.js（静的アプリ）<br/>thirdweb SDK v5"]
+        Wallet["ウォレット<br/>thirdweb In-App Wallet /<br/>MetaMask等"]
     end
 
     subgraph Thirdweb["thirdweb プラットフォーム"]
-        Dashboard["thirdweb Dashboard\n(コントラクトのデプロイ/Lazy Mint/\nClaim Conditions設定)"]
-        RPC["thirdweb RPC\n(43113.rpc.thirdweb.com)"]
-        Storage["thirdweb Storage (IPFS)\nNFTメタデータ・画像"]
+        RPC["thirdweb RPC<br/>43113.rpc.thirdweb.com"]
+        Storage["thirdweb Storage (IPFS)<br/>NFT画像・メタデータ"]
     end
 
-    subgraph Chain["Avalanche Fuji テストネット"]
-        Contract["DropERC1155 コントラクト\n(NFT Collection / Lazy Mint)"]
+    subgraph Chain["Avalanche Fuji テストネット（Chain ID 43113）"]
+        Contract["DropERC1155 コントラクト<br/>メタデータURI・Claim Conditions"]
     end
 
-    Browser -- "1. サイトにアクセス\n(git push -> 自動デプロイ)" --> NextApp
-    Browser -- "2. ウォレット接続" --> Wallet
-    NextApp -- "3. Client IDで初期化\ngetNFTs / Claim Condition取得" --> RPC
-    RPC -- "読み取り" --> Contract
-    Wallet -- "4. claim()トランザクションに署名" --> Contract
-    Contract -- "5. メタデータ参照" --> Storage
-    Dashboard -- "事前準備:\nコントラクトのデプロイ/設定" --> Contract
-    Contract -- "6. Mint結果をイベント発行" --> Wallet
+    Dashboard -- "①-a 画像・メタデータをアップロード" --> Storage
+    Dashboard -- "①-b 取得したURIをLazy Mintで記録<br/>Claim Conditionsを設定" --> Contract
+
+    BuildVercel -- "②-a HTML / JS を配信<br/>※初回ロードのみ" --> Browser
+    Browser -- "②-b 読み取り<br/>getNFTs / Claim Conditions / 保有NFT" --> RPC
+    RPC -- "eth_call（読み取り）" --> Contract
+    Browser -- "②-c claim() への署名を要求" --> Wallet
+    Wallet -- "②-d 署名済みトランザクション" --> RPC
+    RPC -- "②-e claim() を実行" --> Contract
+    Browser -- "②-f tokenURIを解決して画像を取得<br/>（MediaRenderer）" --> Storage
 ```
+
+**この構成図の要点**
+
+- **Vercelは実行時のデータ経路に入らない**。`app/page.tsx` は `"use client"` で、ビルド結果も `○ (Static) prerendered as static content` となる完全な静的プリレンダリングであり、Vercelは初回ロード時にHTML/JSを配信するだけ。以降のRPC呼び出し・署名・画像取得はすべてブラウザが直接行う。したがってサーバー側に秘密鍵は一切存在しない。
+- **スマートコントラクトはIPFSを参照しない**。コントラクトが保持するのは `tokenURI` の文字列のみで、実際にIPFSから画像を取得するのはブラウザ側の `MediaRenderer`。
+- **事前準備と実行時は別の時間軸**。thirdweb Dashboardはコントラクトのデプロイ・Lazy Mint・Claim Conditions設定を行う管理ツールであり、ユーザーのmint操作時には介在しない。
 
 GitHub上ではMermaidブロックはそのまま図として描画されます。画像ファイルとして提出したい場合は、GitHub上でこのREADMEを開きスクリーンショットを撮るか、`docs/architecture.mmd` を [Mermaid Live Editor](https://mermaid.live/) に貼り付けてPNG/SVGを書き出してください。
 
@@ -77,14 +91,15 @@ GitHub上ではMermaidブロックはそのまま図として描画されます�
 
 | 分類 | 名称 | 役割 | 料金プラン |
 |---|---|---|---|
-| ホスティング | Vercel | Next.jsアプリのビルド・デプロイ・配信 | Hobby（無料） |
-| Web3フレームワーク | thirdweb SDK v5 | ウォレット接続・コントラクト読み書きのReactコンポーネント/フック提供 | 無料枠 |
+| ホスティング | Vercel | Next.jsアプリのビルド・静的アセット配信 | Hobby（無料） |
+| Web3フレームワーク | thirdweb SDK v5 (5.120.1) | ウォレット接続・コントラクト読み書きのReactコンポーネント/フック提供 | 無料枠 |
 | Web3管理コンソール | thirdweb Dashboard | コントラクトのデプロイ、Lazy Mint、Claim Conditions設定 | 無料枠 |
 | 分散ストレージ | thirdweb Storage (IPFS) | NFT画像・メタデータの保存 | 無料枠 |
 | ブロックチェーン | Avalanche Fuji Testnet（Chain ID 43113） | NFT(DropERC1155)コントラクトの実行環境 | テストネット（無料） |
-| フロントエンドフレームワーク | Next.js 16 (App Router) | UI実装、ビルドパイプライン | OSS |
-| 言語 | TypeScript 7 | 型安全な実装 | OSS |
-| ウォレット | MetaMask（ユーザー側） | トランザクション署名 | 無料 |
+| フロントエンドフレームワーク | Next.js 16.2.11 (App Router) | UI実装、ビルドパイプライン | OSS |
+| 言語 | TypeScript 6.0.3 | 型安全な実装（7系はNext.jsの内部型チェックが未対応のため見送り、下記10章参照） | OSS |
+| UIライブラリ | React 19 | コンポーネント描画 | OSS |
+| ウォレット | thirdweb In-App Wallet / MetaMask（ユーザー側） | トランザクション署名 | 無料 |
 | バージョン管理 | GitHub | ソースコード公開・提出物のURL提示先 | 無料枠 |
 
 ---

@@ -1,28 +1,40 @@
+%% Avalanche Fuji NFT Drop Studio — システム構成図
+%% 重要: 事前準備（開発者）と実行時（ユーザー）は別の時間軸なので分けて表現する。
+%% 実行時の通信はすべてブラウザが起点で、Vercelは静的アセットを配信するのみ
+%% （ページは全て静的プリレンダリング + クライアント実行）。
 flowchart LR
-    subgraph User["ユーザー環境"]
-        Browser["ブラウザ"]
-        Wallet["MetaMask等\nウォレット拡張"]
+    subgraph Prep["① 事前準備（開発者が1回だけ実施）"]
+        direction LR
+        Dev["開発者<br/>ローカルPC / ブラウザ"]
+        Dashboard["thirdweb Dashboard<br/>Webコンソール"]
+        Dev -- "デプロイ / Lazy Mint /<br/>Claim Conditions設定" --> Dashboard
+        Dev -- "git push / vercel deploy" --> BuildVercel["Vercel<br/>ビルド・静的生成"]
     end
 
-    subgraph Vercel["Vercel（パブリッククラウド無料枠）"]
-        NextApp["Next.js App Router\n(avalanche-fuji-nft-drop-studio)\nthirdweb SDK v5"]
+    subgraph Runtime["② 実行時（ユーザーがサイトを開くたび）"]
+        direction LR
+        Browser["ユーザーのブラウザ<br/>Next.js（静的アプリ）<br/>thirdweb SDK v5"]
+        Wallet["ウォレット<br/>thirdweb In-App Wallet /<br/>MetaMask等"]
     end
 
     subgraph Thirdweb["thirdweb プラットフォーム"]
-        Dashboard["thirdweb Dashboard\n(コントラクトのデプロイ/Lazy Mint/\nClaim Conditions設定)"]
-        RPC["thirdweb RPC\n(43113.rpc.thirdweb.com)"]
-        Storage["thirdweb Storage (IPFS)\nNFTメタデータ・画像"]
+        RPC["thirdweb RPC<br/>43113.rpc.thirdweb.com"]
+        Storage["thirdweb Storage (IPFS)<br/>NFT画像・メタデータ"]
     end
 
-    subgraph Chain["Avalanche Fuji テストネット"]
-        Contract["DropERC1155 コントラクト\n(NFT Collection / Lazy Mint)"]
+    subgraph Chain["Avalanche Fuji テストネット（Chain ID 43113）"]
+        Contract["DropERC1155 コントラクト<br/>メタデータURI・Claim Conditions"]
     end
 
-    Browser -- "1. サイトにアクセス\n(git push -> 自動デプロイ)" --> NextApp
-    Browser -- "2. ウォレット接続" --> Wallet
-    NextApp -- "3. Client IDで初期化\ngetNFTs / Claim Condition取得" --> RPC
-    RPC -- "読み取り" --> Contract
-    Wallet -- "4. claim()トランザクションに署名" --> Contract
-    Contract -- "5. メタデータ参照" --> Storage
-    Dashboard -- "事前準備:\nコントラクトのデプロイ/設定" --> Contract
-    Contract -- "6. Mint結果をイベント発行" --> Wallet
+    %% --- 事前準備 ---
+    Dashboard -- "①-a 画像・メタデータをアップロード" --> Storage
+    Dashboard -- "①-b 取得したURIをLazy Mintで記録<br/>Claim Conditionsを設定" --> Contract
+
+    %% --- 実行時 ---
+    BuildVercel -- "②-a HTML / JS を配信<br/>※初回ロードのみ" --> Browser
+    Browser -- "②-b 読み取り<br/>getNFTs / Claim Conditions / 保有NFT" --> RPC
+    RPC -- "eth_call（読み取り）" --> Contract
+    Browser -- "②-c claim() への署名を要求" --> Wallet
+    Wallet -- "②-d 署名済みトランザクション" --> RPC
+    RPC -- "②-e claim() を実行" --> Contract
+    Browser -- "②-f tokenURIを解決して画像を取得<br/>（MediaRenderer）" --> Storage
